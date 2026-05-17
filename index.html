@@ -1128,8 +1128,10 @@ async function callGemini({ text, pdf }) {
 
 【輸出規則 — 必須嚴格遵守】
 1. 只輸出純 Mermaid 代碼，不要有任何說明文字、標題或 markdown 代碼塊符號（不要 \`\`\`）
-2. 所有節點文字、條件標籤、subgraph 標題必須使用繁體中文
-3. 不要使用 "end" 作為節點 ID（Mermaid 保留字）
+2. 第一行必須是 Mermaid 方向宣告（例如 flowchart TD），不可有任何前置文字
+3. 所有節點文字、條件標籤、subgraph 標題必須使用繁體中文
+4. 節點 ID 只用英文字母或數字（如 A、B1、step1），不可用中文或保留字
+5. 禁止使用以下 Mermaid 保留字作為節點 ID：end、graph、flowchart、subgraph、style、classDef、click、direction
 
 【流程圖要求】
 • 方向：flowchart TD（預設由上至下）；涉及多部門時可用 LR（由左至右）
@@ -1164,7 +1166,13 @@ async function callGemini({ text, pdf }) {
     );
     if (!res.ok) {
       const e = await res.json().catch(() => ({}));
-      throw new Error(e.error?.message || `Gemini ${res.status}`);
+      const msg = e.error?.message || '';
+      if (res.status === 429 || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('resource_exhausted')) {
+        const retryMatch = msg.match(/retry in ([\d.]+)s/i);
+        const retrySec = retryMatch ? `（請於 ${Math.ceil(parseFloat(retryMatch[1]))} 秒後重試）` : '（請稍後重試）';
+        throw new Error(`Gemini API 配額已用盡，請檢查您的方案與帳單設定 ${retrySec}。\n詳情：https://ai.google.dev/gemini-api/docs/rate-limits`);
+      }
+      throw new Error(msg || `Gemini ${res.status}`);
     }
     const data = await res.json();
     let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1191,9 +1199,21 @@ async function callGemini({ text, pdf }) {
 
 function cleanMermaid(raw) {
   let s = raw.trim();
-  // Remove markdown fences
+  // Extract content from fenced code block if present
+  const fenced = s.match(/```(?:mermaid)?\s*\n?([\s\S]*?)```/i);
+  if (fenced) return fenced[1].trim();
+  // Strip any leading/trailing backtick fences without newlines
   s = s.replace(/^```(?:mermaid)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-  return s;
+  // If the response has preamble text, find the first Mermaid directive line
+  const directiveIdx = s.search(/^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap)\b/im);
+  if (directiveIdx > 0) s = s.slice(directiveIdx).trim();
+  // Drop any trailing prose after the last Mermaid line (lines that don't look like code)
+  const lines = s.split('\n');
+  let lastCode = lines.length - 1;
+  while (lastCode > 0 && /^[a-zA-Z一-龥].*[^{}\[\]()>\-|]$/.test(lines[lastCode].trim()) && !lines[lastCode].trim().startsWith('end')) {
+    lastCode--;
+  }
+  return lines.slice(0, lastCode + 1).join('\n').trim();
 }
 
 function autoTitle(code, inputText) {
