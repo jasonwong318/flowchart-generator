@@ -838,20 +838,21 @@ document.addEventListener('DOMContentLoaded', () => {
     startOnLoad: false,
     theme: 'dark',
     themeVariables: {
-      primaryColor:         '#1a2a4a',
-      primaryTextColor:     '#dce7f7',
-      primaryBorderColor:   '#263050',
-      lineColor:            '#4f9eff',
-      secondaryColor:       '#131826',
-      tertiaryColor:        '#0c0f1a',
-      edgeLabelBackground:  '#1a2033',
-      clusterBkg:           '#131826',
-      clusterBorder:        '#263050',
-      titleColor:           '#dce7f7',
-      nodeTextColor:        '#dce7f7',
+      primaryColor:         '#1e3a5f',
+      primaryTextColor:     '#e8f0fe',
+      primaryBorderColor:   '#3b82f6',
+      lineColor:            '#60a5fa',
+      secondaryColor:       '#0d2137',
+      tertiaryColor:        '#0c1a2e',
+      edgeLabelBackground:  '#162033',
+      clusterBkg:           '#0f1e30',
+      clusterBorder:        '#2563eb',
+      titleColor:           '#bfdbfe',
+      nodeTextColor:        '#e8f0fe',
       fontFamily:           'DM Sans, sans-serif',
+      fontSize:             '14px',
     },
-    flowchart:  { htmlLabels: true, curve: 'basis', padding: 20 },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 70 },
     securityLevel: 'loose',
   });
 
@@ -1135,15 +1136,29 @@ async function callGemini({ text, pdf }) {
 
 【流程圖要求】
 • 方向：flowchart TD（預設由上至下）；涉及多部門時可用 LR（由左至右）
-• 節點類型：
+• 節點類型（必須嚴格對應以下 symbol）：
+  - 開始/結束  → ([開始]) / ([結束])
   - 一般步驟   → [步驟名稱]
   - 決策/判斷  → {判斷條件？}
-  - 開始/結束  → ([開始]) / ([結束])
   - 文件/表單  → [/文件名稱/]
   - 系統操作   → [[系統名稱]]
 • 泳道：涉及2個或以上部門/角色時，必須用 subgraph 劃分
 • 審批節點：明確標示通過／拒絕兩條分支
 • 連線標籤：重要條件用 -- 條件 --> 標示
+
+【樣式要求 — 必須加入以下 classDef 並為每個節點套用對應 class】
+在 flowchart 宣告後立即加入：
+  classDef startEnd fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5,font-weight:600
+  classDef process  fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe
+  classDef decision fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7,font-weight:600
+  classDef docNode  fill:#3b0764,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff
+  classDef sysNode  fill:#1e293b,stroke:#94a3b8,stroke-width:1.5px,color:#e2e8f0
+並在所有節點定義後，用 class 指令套用：
+  class <開始節點ID>,<結束節點ID> startEnd
+  class <步驟節點ID列表> process
+  class <決策節點ID列表> decision
+  class <文件節點ID列表> docNode
+  class <系統節點ID列表> sysNode
 • 確保代碼語法正確、完整可運行`;
 
   const parts = pdf
@@ -1252,12 +1267,94 @@ async function renderMermaid(code) {
     out.innerHTML = `<div id="svg-wrap" style="transform-origin:top center; transform:scale(${currentZoom}); transition:transform 0.2s;">${svg}</div>`;
     const svgEl = out.querySelector('svg');
     if (svgEl) {
-      svgEl.style.maxWidth  = '100%';
-      svgEl.style.height    = 'auto';
+      svgEl.style.maxWidth = '100%';
+      svgEl.style.height   = 'auto';
+      enhanceMermaidSVG(svgEl);
     }
   } catch(e) {
     out.innerHTML = `<div class="error-box">⚠ Mermaid 語法錯誤<br><br>${escHtml(String(e.message || e))}</div>`;
   }
+}
+
+function enhanceMermaidSVG(svg) {
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // Inject gradient definitions
+  let defs = svg.querySelector('defs');
+  if (!defs) { defs = document.createElementNS(NS, 'defs'); svg.insertBefore(defs, svg.firstChild); }
+
+  const grads = [
+    { id: 'fc-grad-process',  c0: '#1e4080', c1: '#0d2137' },
+    { id: 'fc-grad-decision', c0: '#7c3500', c1: '#3d1a00' },
+    { id: 'fc-grad-terminal', c0: '#065f46', c1: '#022c22' },
+    { id: 'fc-grad-doc',      c0: '#3b0764', c1: '#1a0530' },
+    { id: 'fc-grad-system',   c0: '#1e293b', c1: '#0f172a' },
+  ];
+  grads.forEach(({ id, c0, c1 }) => {
+    if (defs.querySelector(`#${id}`)) return;
+    const g = document.createElementNS(NS, 'linearGradient');
+    g.setAttribute('id', id);
+    g.setAttribute('x1', '0%'); g.setAttribute('y1', '0%');
+    g.setAttribute('x2', '0%'); g.setAttribute('y2', '100%');
+    g.innerHTML = `<stop offset="0%" stop-color="${c0}"/><stop offset="100%" stop-color="${c1}"/>`;
+    defs.appendChild(g);
+  });
+
+  // Inject enhancement CSS
+  const style = document.createElementNS(NS, 'style');
+  style.textContent = `
+    /* Process rectangles → blue gradient */
+    .node rect {
+      fill: url(#fc-grad-process) !important;
+      stroke: #3b82f6 !important; stroke-width: 1.5px !important;
+      filter: drop-shadow(0 3px 8px rgba(59,130,246,0.35));
+    }
+    /* Decision diamonds → amber gradient */
+    .node polygon {
+      fill: url(#fc-grad-decision) !important;
+      stroke: #f59e0b !important; stroke-width: 2px !important;
+      filter: drop-shadow(0 3px 8px rgba(245,158,11,0.35));
+    }
+    /* Circle nodes → teal */
+    .node circle {
+      fill: url(#fc-grad-terminal) !important;
+      stroke: #34d399 !important; stroke-width: 2px !important;
+      filter: drop-shadow(0 3px 8px rgba(52,211,153,0.4));
+    }
+    /* Stadium/pill paths (start & end) → teal */
+    .node path {
+      fill: url(#fc-grad-terminal) !important;
+      stroke: #34d399 !important; stroke-width: 2px !important;
+      filter: drop-shadow(0 3px 8px rgba(52,211,153,0.4));
+    }
+    /* Subgraph cluster containers */
+    .cluster rect {
+      fill: #0a1929 !important;
+      stroke: #2563eb !important; stroke-width: 1.5px !important;
+      stroke-dasharray: 6,3 !important;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+    }
+    /* Edges — thicker, brighter */
+    .edgePath path {
+      stroke: #60a5fa !important; stroke-width: 2px !important;
+    }
+    /* Arrow markers */
+    marker path { fill: #60a5fa !important; }
+    /* Edge label chips */
+    .edgeLabel foreignObject div {
+      background: #162033 !important;
+      border: 1px solid #3b82f6 !important;
+      border-radius: 4px !important;
+      padding: 1px 6px !important;
+      font-size: 11px !important; font-weight: 600 !important;
+      color: #93c5fd !important;
+    }
+    /* Node text */
+    .nodeLabel, .label { font-weight: 500 !important; letter-spacing: 0.01em !important; }
+    /* Subgraph title */
+    .cluster-label { font-weight: 600 !important; font-size: 13px !important; }
+  `;
+  svg.insertBefore(style, svg.firstChild);
 }
 
 function setupCodeEditor() {
