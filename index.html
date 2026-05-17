@@ -1257,16 +1257,17 @@ async function callGemini({ text, pdf }) {
     if (!res.ok || data.error) {
       const msg = data.error?.message || '';
       const status = data.error?.status || '';
-      const isQuota = res.status === 429 || status === 'RESOURCE_EXHAUSTED'
+      const httpCode = res.status;
+      console.error('[Gemini] HTTP', httpCode, 'status:', status, 'msg:', msg);
+      const isQuota = httpCode === 429 || status === 'RESOURCE_EXHAUSTED'
         || msg.toLowerCase().includes('quota')
-        || msg.toLowerCase().includes('resource_exhausted')
-        || msg.toLowerCase().includes('exceeded');
+        || msg.toLowerCase().includes('resource_exhausted');
       if (isQuota) {
         const retryMatch = msg.match(/retry in ([\d.]+)s/i);
-        const retrySec = retryMatch ? `（請於 ${Math.ceil(parseFloat(retryMatch[1]))} 秒後重試）` : '（請稍後重試）';
-        throw new Error(`Gemini API 配額已用盡，請檢查您的方案與帳單設定 ${retrySec}`);
+        const retrySec = retryMatch ? `（請於 ${Math.ceil(parseFloat(retryMatch[1]))} 秒後重試）` : '';
+        throw new Error(`Gemini API 配額已用盡 ${retrySec}｜請更換 API Key 或稍後再試`);
       }
-      throw new Error(msg || `Gemini ${res.status}`);
+      throw new Error(`[${httpCode}${status ? ' ' + status : ''}] ${msg || '未知錯誤'}`);
     }
     let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const code = cleanMermaid(raw);
