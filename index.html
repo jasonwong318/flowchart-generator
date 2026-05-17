@@ -1196,7 +1196,7 @@ async function generateFlowchart() {
 }
 
 async function callGemini({ text, pdf }) {
-  setStatus('調用 Gemini Flash...', true);
+  setStatus('調用 Gemini...', true);
   showLoading('AI 正在分析業務流程...');
 
   const systemPrompt = `你是資深業務流程分析師，專長將業務制度轉換為清晰的 Mermaid.js 流程圖。
@@ -1245,32 +1245,9 @@ async function callGemini({ text, pdf }) {
       ];
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${cfg.geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] }),
-      }
-    );
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.error) {
-      const msg = data.error?.message || '';
-      const status = data.error?.status || '';
-      const httpCode = res.status;
-      console.error('[Gemini] HTTP', httpCode, 'status:', status, 'msg:', msg);
-      const isQuota = httpCode === 429 || status === 'RESOURCE_EXHAUSTED'
-        || msg.toLowerCase().includes('quota')
-        || msg.toLowerCase().includes('resource_exhausted');
-      if (isQuota) {
-        const retryMatch = msg.match(/retry in ([\d.]+)s/i);
-        const retrySec = retryMatch ? `（請於 ${Math.ceil(parseFloat(retryMatch[1]))} 秒後重試）` : '';
-        throw new Error(`Gemini API 配額已用盡 ${retrySec}｜請更換 API Key 或稍後再試`);
-      }
-      throw new Error(`[${httpCode}${status ? ' ' + status : ''}] ${msg || '未知錯誤'}`);
-    }
-    let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const code = cleanMermaid(raw);
+    const result = await callGeminiWithFallback(parts);
+    const code = cleanMermaid(result.text);
+    const modelUsed = result.model;
 
     document.getElementById('mermaid-code').value = code;
     await renderMermaid(code);
@@ -1280,7 +1257,7 @@ async function callGemini({ text, pdf }) {
       autoTitle(code, text);
     }
 
-    toast('流程圖生成成功 ✓', 'success');
+    toast(`流程圖生成成功 ✓（${modelUsed}）`, 'success');
     setStatus('生成完成', false);
   } catch(e) {
     toast('生成失敗：' + e.message, 'error');
@@ -1289,6 +1266,43 @@ async function callGemini({ text, pdf }) {
   } finally {
     hideLoading();
   }
+}
+
+async function callGeminiWithFallback(parts) {
+  const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
+  let lastErr;
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.geminiKey}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts }] }) }
+      );
+      const data = await res.json().catch(() => ({}));
+      console.log(`[Gemini] ${model} → HTTP ${res.status}`, data.error?.status || 'OK');
+      if (!res.ok || data.error) {
+        const msg   = data.error?.message || '';
+        const status = data.error?.status || '';
+        const isQuota = res.status === 429 || status === 'RESOURCE_EXHAUSTED'
+          || msg.toLowerCase().includes('quota')
+          || msg.toLowerCase().includes('resource_exhausted');
+        if (isQuota) {
+          lastErr = { quota: true, model, msg };
+          toast(`${model} 配額已滿，嘗試備用模型…`, 'info');
+          continue;
+        }
+        throw new Error(`[${res.status}${status ? ' '+status : ''}] ${msg || '未知錯誤'}`);
+      }
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return { text, model };
+    } catch(e) {
+      if (e.message?.includes('fetch') || e.name === 'TypeError') throw e;
+      if (!lastErr?.quota) throw e;
+    }
+  }
+  const retryMatch = lastErr?.msg?.match(/retry in ([\d.]+)s/i);
+  const retrySec = retryMatch ? `（請於 ${Math.ceil(parseFloat(retryMatch[1]))} 秒後重試）` : '';
+  throw new Error(`所有 Gemini 模型配額已用盡 ${retrySec}｜請更換 API Key 或稍後再試`);
 }
 
 function cleanMermaid(raw) {
