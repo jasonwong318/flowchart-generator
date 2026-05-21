@@ -1245,6 +1245,7 @@ body {
           <span class="panel-title">即時預覽</span>
           <div class="panel-actions">
             <button class="btn-icon" onclick="openInDrawio()" title="在 Draw.io 中開啟並編輯">✏️ Draw.io</button>
+            <button class="btn-icon" onclick="fitDiagram()" title="適應畫面">⊡ 適應</button>
             <button class="btn-icon" onclick="zoomIn()">＋</button>
             <button class="btn-icon" onclick="zoomOut()">－</button>
             <button class="btn-icon" onclick="resetZoom()">重置</button>
@@ -2356,6 +2357,8 @@ async function renderMermaid(code) {
         else enhanceMermaidSVGLight(svgEl);
       }
       setupNodeEditing(svgEl);
+      // Auto-fit diagram to container after a short delay (let SVG layout settle)
+      requestAnimationFrame(() => fitDiagram());
     }
   } catch(e) {
     const msg = String(e.message || e).split('\n')[0];
@@ -2826,10 +2829,30 @@ function switchTab(tab) {
 }
 
 // ============================================================
-// ZOOM
+// ZOOM + FIT
 // ============================================================
-function zoomIn() { setZoom(currentZoom + 0.1); }
-function zoomOut() { setZoom(currentZoom - 0.1); }
+function zoomIn() { setZoom(currentZoom + 0.15); }
+function zoomOut() { setZoom(currentZoom - 0.15); }
+
+function fitDiagram() {
+  const out = document.getElementById('preview-output');
+  const svgEl = out.querySelector('svg');
+  if (!svgEl) return;
+  // Get natural SVG size from viewBox or width/height attrs
+  let natW = 0, natH = 0;
+  const vb = svgEl.getAttribute('viewBox');
+  if (vb) { const p = vb.split(/[\s,]+/).map(Number); if (p.length >= 4) { natW = p[2]; natH = p[3]; } }
+  if (!natW) natW = parseFloat(svgEl.getAttribute('width') || 0);
+  if (!natH) natH = parseFloat(svgEl.getAttribute('height') || 0);
+  if (!natW || !natH) return;
+  const padX = 32, padY = 32;
+  const contW = out.clientWidth  - padX;
+  const contH = out.clientHeight - padY;
+  const fit = Math.min(contW / natW, contH / natH, 1); // don't upscale beyond 100%
+  setZoom(Math.max(0.15, parseFloat(fit.toFixed(2))));
+  // Reset scroll to top-left
+  out.scrollLeft = 0; out.scrollTop = 0;
+}
 function resetZoom() { 
   currentZoom = 1; 
   const wrap = document.getElementById('svg-wrap');
@@ -2876,21 +2899,40 @@ function closeExportMenu() {
   document.getElementById('export-menu')?.classList.add('hidden');
 }
 
-function exportPDF() {
+async function exportPDF() {
+  const code = document.getElementById('mermaid-code').value.trim();
   const svg = document.querySelector('#preview-output svg');
-  if (!svg) { toast('尚無流程圖可匯出', 'error'); return; }
+  if (!svg && !code) { toast('尚無流程圖可匯出', 'error'); return; }
   const title = exportName();
   const bgColor = currentTheme === 'dark' ? '#0c0f1a' : '#ffffff';
+  const textColor = currentTheme === 'dark' ? '#dce7f7' : '#1a202c';
+
+  let svgHtml = svg?.outerHTML || '';
+
+  // Re-render with htmlLabels:false for clean PDF text (fixes 是/否 clipping)
+  if (code && !isPlantUML(code)) {
+    try {
+      const cfg = getMermaidConfig(currentTheme);
+      cfg.flowchart = { ...cfg.flowchart, htmlLabels: false };
+      mermaid.initialize(cfg);
+      const { svg: cleanSvg } = await mermaid.render('fc_pdf_' + Date.now(), code);
+      svgHtml = cleanSvg;
+    } catch { /* keep original */ } finally {
+      mermaid.initialize(getMermaidConfig(currentTheme));
+    }
+  }
+
   const win = window.open('', '_blank');
   win.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
 <style>
   @page { margin:1.5cm; size:A4 landscape; }
-  body { margin:0; padding:0; display:flex; align-items:center; justify-content:center;
+  body { margin:0; padding:16px; display:flex; align-items:center; justify-content:center;
          background:${bgColor}; min-height:100vh; }
-  svg  { max-width:100%; max-height:95vh; }
+  svg  { max-width:100%; max-height:90vh; }
+  text, .nodeLabel, .label { font-family: Arial, sans-serif !important; font-weight: 400 !important; fill: ${textColor}; }
   @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
 </style></head><body>
-${svg.outerHTML}
+${svgHtml}
 <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),800);}<\/script>
 </body></html>`);
   win.document.close();
@@ -2902,39 +2944,31 @@ ${svg.outerHTML}
 // ============================================================
 let _drawioHandler = null;
 
+// ============================================================
+// DRAW.IO INTEGRATION  — opens in new tab (iframe blocked by diagrams.net)
+// ============================================================
 function openInDrawio() {
-  const svg = document.querySelector('#preview-output svg');
   const code = document.getElementById('mermaid-code').value.trim();
-  if (!svg && !code) { toast('尚無流程圖可編輯', 'error'); return; }
+  if (!code) { toast('尚無流程圖可編輯', 'error'); return; }
 
-  const modal = document.getElementById('drawio-modal');
-  modal.style.display = 'flex';
-
-  const iframe = document.getElementById('drawio-iframe');
-
-  // Build Draw.io URL — for Mermaid use their built-in import; for PlantUML/other use SVG
-  let drawioUrl;
-  if (code && !isPlantUML(code)) {
-    // Encode Mermaid as base64 for Draw.io's Mermaid import URL
-    try {
-      const encoded = btoa(unescape(encodeURIComponent(code)));
-      drawioUrl = `https://app.diagrams.net/?splash=0&ui=min&edit=_blank&src=mermaid&mermaid=${encoded}`;
-    } catch {
-      drawioUrl = 'https://app.diagrams.net/?splash=0&ui=min';
-    }
+  if (!isPlantUML(code)) {
+    navigator.clipboard.writeText(code).catch(() => {});
+    window.open('https://app.diagrams.net/?splash=0', '_blank');
+    toast('✓ Mermaid 代碼已複製。在 Draw.io: Extras → Edit Diagram → Mermaid 頁簽貼上', 'success');
   } else {
-    drawioUrl = 'https://app.diagrams.net/?splash=0&ui=min';
+    const svg = document.querySelector('#preview-output svg');
+    if (svg) {
+      const svgBlob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      window.open(`https://app.diagrams.net/?splash=0#U${encodeURIComponent(svgUrl)}`, '_blank');
+    } else {
+      window.open('https://app.diagrams.net/?splash=0', '_blank');
+    }
+    toast('已開啟 Draw.io，可在其中匯入 SVG 進行編輯', 'info');
   }
-
-  iframe.src = drawioUrl;
-  toast('Draw.io 載入中，編輯完成後點「匯入修改」', 'info');
 }
 
-function importFromDrawio() {
-  // Draw.io changes are in a new tab; close the modal and remind user to export SVG
-  toast('請在 Draw.io 中執行 File → Export As → SVG，然後使用「↓ 匯出」匯入', 'info');
-  closeDrawio();
-}
+function importFromDrawio() { closeDrawio(); }
 
 function closeDrawio() {
   const modal = document.getElementById('drawio-modal');
@@ -2954,22 +2988,42 @@ function exportSVG() {
   toast('SVG 已下載', 'success');
 }
 
-function exportPNG() {
-  const svg = document.querySelector('#preview-output svg');
-  if (!svg) { toast('尚無流程圖可匯出', 'error'); return; }
+async function exportPNG() {
+  const code = document.getElementById('mermaid-code').value.trim();
+  const hasSVG = !!document.querySelector('#preview-output svg');
+  if (!code && !hasSVG) { toast('尚無流程圖可匯出', 'error'); return; }
 
   showLoading('正在生成 PNG...');
 
   try {
-    // 方法 1: 使用 DOM-to-Image 庫 (最可靠, 但需要引入庫)
-    // 方法 2: 使用 html2canvas (截圖整個預覽區)
-    // 方法 3: 使用原生 Canvas (需要淨化 SVG)
-    // 這裡使用方法 3 的改進版 + 方法 2 作為備選
+    let svgString;
 
-    const scale = 4;
+    if (code && !isPlantUML(code)) {
+      // Re-render with htmlLabels:false → pure SVG text, no foreignObject → no canvas taint, no blur
+      const exportCfg = getMermaidConfig(currentTheme);
+      exportCfg.flowchart = { ...exportCfg.flowchart, htmlLabels: false };
+      mermaid.initialize(exportCfg);
+      try {
+        const { svg: exportSvg } = await mermaid.render('fc_exp_' + Date.now(), code);
+        svgString = exportSvg;
+      } finally {
+        mermaid.initialize(getMermaidConfig(currentTheme));
+      }
+    } else {
+      const svgEl = document.querySelector('#preview-output svg');
+      if (!svgEl) { hideLoading(); toast('尚無流程圖', 'error'); return; }
+      svgString = new XMLSerializer().serializeToString(svgEl);
+    }
+
+    // Parse into DOM to get dimensions
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgString, 'image/svg+xml');
+    const svgEl2 = doc.querySelector('svg');
+
+    const scale = 3;
     let svgWidth, svgHeight;
 
-    const viewBox = svg.getAttribute('viewBox');
+    const viewBox = svgEl2?.getAttribute('viewBox');
     if (viewBox) {
       const parts = viewBox.split(/[\s,]+/).map(Number);
       if (parts.length >= 4 && parts[2] > 0 && parts[3] > 0) {
@@ -2977,16 +3031,13 @@ function exportPNG() {
       }
     }
     if (!svgWidth || !svgHeight) {
-      const wAttr = svg.getAttribute('width');
-      const hAttr = svg.getAttribute('height');
+      const wAttr = svgEl2?.getAttribute('width');
+      const hAttr = svgEl2?.getAttribute('height');
       if (wAttr && hAttr) { svgWidth = parseFloat(wAttr); svgHeight = parseFloat(hAttr); }
     }
     if (!svgWidth || !svgHeight || svgWidth <= 0 || svgHeight <= 0) {
-      try { const bbox = svg.getBBox(); svgWidth = bbox.width; svgHeight = bbox.height; } catch (e) {}
-    }
-    if (!svgWidth || !svgHeight || svgWidth <= 0 || svgHeight <= 0) {
-      const bb = svg.getBoundingClientRect();
-      svgWidth = bb.width; svgHeight = bb.height;
+      const liveSvg = document.querySelector('#preview-output svg');
+      if (liveSvg) { try { const bb = liveSvg.getBBox(); svgWidth = bb.width; svgHeight = bb.height; } catch {} }
     }
     svgWidth = Math.max(svgWidth || 800, 100);
     svgHeight = Math.max(svgHeight || 600, 100);
@@ -2996,8 +3047,8 @@ function exportPNG() {
     else if (currentTheme === 'bw' || currentTheme === 'blackwhite') bgColor = '#ffffff';
     else bgColor = '#f8fafc';
 
-    // 核心修復: 淨化 SVG, 移除外部字體與 CSS 變數引用
-    const sanitizedSvg = sanitizeSVGForExport(svg, bgColor);
+    // For re-rendered pure-SVG-text export, just add bg rect; no foreignObject to worry about
+    const sanitizedSvg = svgEl2 ? sanitizeSVGForExport(svgEl2, bgColor) : svgString;
 
     const img = new Image();
 
@@ -3065,8 +3116,12 @@ async function exportPNGByScreenshot(scale, bgColor) {
   }
 }
 
-// 淨化 SVG: 移除外部字體引用, 內聯樣式, 確保 Canvas 不被污染
 function sanitizeSVGForExport(svgEl, bgColor) {
+  if (typeof svgEl === 'string') {
+    const p = new DOMParser();
+    svgEl = p.parseFromString(svgEl, 'image/svg+xml').querySelector('svg');
+    if (!svgEl) return '';
+  }
   const clone = svgEl.cloneNode(true);
   const NS = 'http://www.w3.org/2000/svg';
 
