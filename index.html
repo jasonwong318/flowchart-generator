@@ -3,26 +3,37 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>流程圖生成器 | Flowchart Generator</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>AI 流程圖生成器 Pro | 內部審計專用</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.5.0/dist/mermaid.min.js"></script>
+<!-- 字體已由系統字體替代, 避免 Canvas 污染 -->
+<!-- <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"> -->
 <style>
 :root {
   --bg:         #0c0f1a;
   --surface:    #131826;
   --surface2:   #1a2033;
   --surface3:   #202840;
+  --surface4:   #2a3450;
   --border:     #263050;
+  --border2:    #354060;
   --accent:     #4f9eff;
+  --accent2:    #3b82f6;
   --accent-dim: rgba(79,158,255,0.12);
   --accent-glow:rgba(79,158,255,0.25);
   --cyan:       #06d6a0;
   --amber:      #fbbf24;
   --red:        #f87171;
+  --orange:     #fb923c;
+  --purple:     #a78bfa;
   --text:       #dce7f7;
+  --text2:      #b0c4de;
   --text-dim:   #6b80a8;
-  --font:       'DM Sans', sans-serif;
-  --mono:       'JetBrains Mono', monospace;
+  --text-muted: #4a5a7a;
+  --font:       'Arial', 'Helvetica Neue', 'Microsoft JhengHei', sans-serif;
+  --mono:       'Courier New', 'Consolas', monospace;
+  --shadow-sm:  0 2px 8px rgba(0,0,0,0.3);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.5);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,8 +51,8 @@ body {
 
 /* ===== SIDEBAR ===== */
 #sidebar {
-  width: 256px;
-  min-width: 256px;
+  width: 280px;
+  min-width: 280px;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
@@ -106,15 +117,16 @@ body {
 }
 
 .history-item {
-  padding: 9px 10px;
-  border-radius: 7px;
+  padding: 10px 12px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: all 0.15s;
   margin-bottom: 3px;
   border: 1px solid transparent;
   position: relative;
+  background: transparent;
 }
-.history-item:hover { background: var(--surface2); }
+.history-item:hover { background: var(--surface2); border-color: var(--border); }
 .history-item.active {
   background: var(--accent-dim);
   border-color: rgba(79,158,255,0.35);
@@ -127,12 +139,25 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   padding-right: 22px;
+  color: var(--text);
 }
 
 .history-item-meta {
   font-size: 11px;
   color: var(--text-dim);
-  margin-top: 2px;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-item-tag {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface3);
+  color: var(--text-dim);
+  font-weight: 600;
 }
 
 .history-del {
@@ -166,11 +191,12 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
 }
 
 /* ===== TOP BAR ===== */
 #topbar {
-  height: 50px;
+  height: 52px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -184,12 +210,12 @@ body {
   background: var(--surface2);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 7px 14px;
+  border-radius: 7px;
   font-family: var(--font);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
-  width: 240px;
+  width: 280px;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 #diagram-title:focus {
@@ -285,7 +311,7 @@ body {
 }
 
 .tab-pill {
-  padding: 4px 14px;
+  padding: 5px 14px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
@@ -378,6 +404,96 @@ body {
   50% { opacity: 0.3; }
 }
 
+/* ===== CONFIG BAR (NEW) ===== */
+#config-bar {
+  display: flex;
+  gap: 12px;
+  padding: 0 0 10px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.config-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.config-select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color 0.2s;
+  height: 30px;
+  min-width: 100px;
+}
+.config-select:focus { outline: none; border-color: var(--accent); }
+.config-select:hover { border-color: var(--accent); }
+.config-select option { background: var(--surface2); color: var(--text); }
+
+.config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.config-toggle:hover { background: var(--surface2); }
+
+.config-toggle input[type="checkbox"] {
+  appearance: none;
+  width: 32px;
+  height: 18px;
+  background: var(--surface3);
+  border-radius: 9px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: 1px solid var(--border);
+}
+.config-toggle input[type="checkbox"]::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  top: 1px;
+  left: 2px;
+  transition: all 0.2s;
+}
+.config-toggle input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.config-toggle input[type="checkbox"]:checked::after {
+  left: 15px;
+  background: #fff;
+}
+
+.config-toggle-label {
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 500;
+}
+
 /* ===== WORKSPACE ===== */
 #workspace {
   flex: 1;
@@ -440,6 +556,7 @@ body {
   justify-content: center;
   padding: 24px;
   background: var(--bg);
+  min-height: 0;
 }
 
 #preview-output svg {
@@ -547,7 +664,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 32px 36px;
-  width: 500px;
+  width: 520px;
   max-width: 92vw;
   box-shadow: 0 24px 60px rgba(0,0,0,0.5);
   position: relative;
@@ -649,23 +766,6 @@ body {
 #toast.error   { background: var(--red);  color: #fff; }
 #toast.info    { background: var(--accent); color: #fff; }
 
-/* ===== THEME SELECT ===== */
-.theme-select {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 5px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-family: var(--font);
-  cursor: pointer;
-  transition: border-color 0.2s;
-  height: 30px;
-}
-.theme-select:focus { outline: none; border-color: var(--accent); }
-.theme-select:hover { border-color: var(--accent); }
-.theme-select option { background: var(--surface2); color: var(--text); }
-
 /* ===== TEMPLATE MODAL ===== */
 .tpl-modal {
   width: 1000px; max-width: 96vw;
@@ -733,6 +833,43 @@ body {
 }
 .tpl-modal-close:hover { color: var(--text); background: var(--surface3); }
 
+/* ===== AI MODEL SELECTOR ===== */
+.ai-model-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.ai-model-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.ai-model-btn {
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.18s;
+  font-family: var(--font);
+}
+.ai-model-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ai-model-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(79,158,255,0.3);
+}
+
 /* ===== UTIL ===== */
 .hidden { display: none !important; }
 
@@ -750,6 +887,87 @@ body {
   flex-shrink: 0;
 }
 #splitter:hover, #splitter.dragging { background: var(--accent); }
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.badge-gemini { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.badge-deepseek { background: rgba(6,214,160,0.15); color: #34d399; }
+.badge-kimi { background: rgba(251,146,60,0.15); color: #fb923c; }
+.badge-doubao { background: rgba(167,139,250,0.15); color: #a78bfa; }
+
+/* ===== CONFIG TAB ACTIVE STYLES ===== */
+#cfg-tab-gemini.active,
+#cfg-tab-deepseek.active,
+#cfg-tab-kimi.active,
+#cfg-tab-doubao.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff !important;
+  border-color: var(--accent);
+  box-shadow: 0 2px 10px rgba(59,130,246,0.3);
+}
+#cfg-tab-gemini.active:hover,
+#cfg-tab-deepseek.active:hover,
+#cfg-tab-kimi.active:hover,
+#cfg-tab-doubao.active:hover {
+  color: #fff !important;
+}
+
+/* ===== NODE EDITOR OVERLAY ===== */
+.node-editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12,15,26,0.85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+.node-editor-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 32px;
+  width: 420px;
+  max-width: 92vw;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+.node-editor-box .modal-title {
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+.node-editor-box .modal-desc {
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+.node-editor-box .form-input {
+  font-family: var(--font);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.node-editor-preview {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 20px;
+  font-family: var(--mono);
+  line-height: 1.6;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
 </style>
 </head>
 <body>
@@ -757,22 +975,63 @@ body {
 <!-- ===== CONFIG MODAL ===== -->
 <div class="modal-backdrop" id="config-modal">
   <div class="modal">
-    <div class="modal-logo">Flowchart Generator</div>
+    <div class="modal-logo">Flowchart Generator Pro</div>
     <div class="modal-title">初次設定 ⚙️</div>
-    <div class="modal-desc">填入 API 憑證以啟用功能。所有資訊僅儲存於本機瀏覽器，不會傳送至任何第三方伺服器。</div>
-    <div class="form-group">
-      <label class="form-label">Gemini API Key</label>
-      <input class="form-input" type="password" id="cfg-gemini" placeholder="AIzaSy...">
+    <div class="modal-desc">填入 API 憑證以啟用功能。所有資訊僅儲存於本機瀏覽器，不會傳送至任何第三方伺服器。<br><br>
+    <strong style="color:var(--cyan)">💡 建議</strong>：至少配置一個 AI 模型。國產模型（DeepSeek / Kimi / 豆包）通常有免費額度。</div>
+
+    <div style="display:flex; gap:8px; margin-bottom:18px;">
+      <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('gemini')" id="cfg-tab-gemini" style="flex:1; justify-content:center;">Gemini</button>
+      <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('deepseek')" id="cfg-tab-deepseek" style="flex:1; justify-content:center;">DeepSeek</button>
+      <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('kimi')" id="cfg-tab-kimi" style="flex:1; justify-content:center;">Kimi</button>
+      <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('doubao')" id="cfg-tab-doubao" style="flex:1; justify-content:center;">豆包</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">GitHub Personal Access Token（repo 權限）</label>
-      <input class="form-input" type="password" id="cfg-token" placeholder="ghp_...">
+
+    <div id="cfg-panel-gemini">
+      <div class="form-group">
+        <label class="form-label">Gemini API Key</label>
+        <input class="form-input" type="password" id="cfg-gemini" placeholder="AIzaSy...">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">取得方式：Google AI Studio → 建立 API Key</div>
+      </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">GitHub Repo（用戶名/倉庫名）</label>
-      <input class="form-input" type="text" id="cfg-repo" placeholder="jasonwong318/flowchart-generator">
+
+    <div id="cfg-panel-deepseek" class="hidden">
+      <div class="form-group">
+        <label class="form-label">DeepSeek API Key</label>
+        <input class="form-input" type="password" id="cfg-deepseek" placeholder="sk-...">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">取得方式：DeepSeek 開放平台 → API Keys</div>
+      </div>
     </div>
+
+    <div id="cfg-panel-kimi" class="hidden">
+      <div class="form-group">
+        <label class="form-label">Kimi (Moonshot) API Key</label>
+        <input class="form-input" type="password" id="cfg-kimi" placeholder="sk-...">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">取得方式：Moonshot AI 開放平台</div>
+      </div>
+    </div>
+
+    <div id="cfg-panel-doubao" class="hidden">
+      <div class="form-group">
+        <label class="form-label">豆包 (火山引擎) API Key</label>
+        <input class="form-input" type="password" id="cfg-doubao" placeholder="...">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">取得方式：火山引擎 → 模型推理 → API Key</div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border); margin:18px 0; padding-top:18px;">
+      <div class="form-group">
+        <label class="form-label">GitHub Personal Access Token（repo 權限）</label>
+        <input class="form-input" type="password" id="cfg-token" placeholder="ghp_...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">GitHub Repo（用戶名/倉庫名）</label>
+        <input class="form-input" type="text" id="cfg-repo" placeholder="jasonwong318/flowchart-generator">
+      </div>
+    </div>
+
     <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="skipConfig()">稍後設定</button>
       <button class="btn btn-primary" onclick="saveConfig()">確認並開始使用 →</button>
     </div>
   </div>
@@ -793,8 +1052,8 @@ body {
   <!-- SIDEBAR -->
   <aside id="sidebar">
     <div class="sidebar-logo">
-      <div class="logo-mark">FC Gen</div>
-      <div class="logo-sub">流程圖生成器</div>
+      <div class="logo-mark">FC Gen Pro</div>
+      <div class="logo-sub">AI 流程圖生成器 · 審計專用</div>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-section-label">歷史記錄</span>
@@ -816,8 +1075,9 @@ body {
     <div id="topbar">
       <input id="diagram-title" type="text" placeholder="輸入流程圖名稱...">
       <div class="topbar-right">
-        <select class="theme-select" id="theme-select" onchange="setTheme(this.value)" title="切換主題">
+        <select class="config-select" id="theme-select" onchange="setTheme(this.value)" title="切換主題" style="width:110px;">
           <option value="dark">🌙 深色</option>
+          <option value="bw">⬛ 黑白</option>
           <option value="default">☀️ 淺色</option>
           <option value="forest">🌲 森林</option>
           <option value="neutral">⬜ 中性</option>
@@ -832,6 +1092,65 @@ body {
 
     <!-- INPUT AREA -->
     <div id="input-area">
+      <!-- AI Model Selector -->
+      <div class="ai-model-row">
+        <span class="ai-model-label">🤖 AI 模型</span>
+        <button class="ai-model-btn active" id="model-gemini" onclick="setAIModel('gemini')">
+          Gemini <span class="badge badge-gemini" style="margin-left:4px;">Google</span>
+        </button>
+        <button class="ai-model-btn" id="model-deepseek" onclick="setAIModel('deepseek')">
+          DeepSeek <span class="badge badge-deepseek" style="margin-left:4px;">免費</span>
+        </button>
+        <button class="ai-model-btn" id="model-kimi" onclick="setAIModel('kimi')">
+          Kimi <span class="badge badge-kimi" style="margin-left:4px;">長文本</span>
+        </button>
+        <button class="ai-model-btn" id="model-doubao" onclick="setAIModel('doubao')">
+          豆包 <span class="badge badge-doubao" style="margin-left:4px;">免費</span>
+        </button>
+      </div>
+
+      <!-- Configuration Bar -->
+      <div id="config-bar">
+        <div class="config-group">
+          <span class="config-label">📐 方向</span>
+          <select class="config-select" id="direction-select">
+            <option value="TD">⬇️ 由上至下 (TD)</option>
+            <option value="LR">➡️ 由左至右 (LR)</option>
+            <option value="auto">🤖 AI 自動判斷</option>
+          </select>
+        </div>
+        <div class="config-group">
+          <span class="config-label">🏊 泳道</span>
+          <select class="config-select" id="swimlane-select">
+            <option value="auto">🤖 AI 自動偵測</option>
+            <option value="force">✅ 強制啟用</option>
+            <option value="none">❌ 不啟用</option>
+          </select>
+        </div>
+        <div class="config-group">
+          <span class="config-label">🎨 專業主題</span>
+          <select class="config-select" id="pro-theme-select">
+            <option value="professional">🏢 商務專業</option>
+            <option value="audit">🔍 審計專用</option>
+            <option value="modern">💎 現代簡約</option>
+            <option value="classic">📋 經典標準</option>
+            <option value="blackwhite">⬛ 黑白列印</option>
+          </select>
+        </div>
+        <div class="config-group">
+          <span class="config-label">🔧 樣式</span>
+          <select class="config-select" id="node-style-select">
+            <option value="rounded">🔵 圓角矩形</option>
+            <option value="sharp">⬜ 直角矩形</option>
+            <option value="mixed">🎨 混合風格</option>
+          </select>
+        </div>
+        <label class="config-toggle" style="margin-left:auto;">
+          <input type="checkbox" id="auto-enhance" checked>
+          <span class="config-toggle-label">自動美化 SVG</span>
+        </label>
+      </div>
+
       <div class="tab-row">
         <button class="tab-pill active" id="tab-text" onclick="switchTab('text')">📝 文字輸入</button>
         <button class="tab-pill" id="tab-pdf" onclick="switchTab('pdf')">📄 PDF 上傳</button>
@@ -852,8 +1171,11 @@ body {
         </button>
         <div class="action-hint">
           <span class="dot-live"></span>
-          <span>Gemini Flash · 自動偵測泳道</span>
+          <span id="ai-status">Gemini 2.5 Flash-Lite · 智能偵測泳道</span>
         </div>
+      </div>
+      <div id="swimlane-notice" style="margin-top:8px; padding:8px 12px; background:var(--accent-dim); border:1px solid var(--border); border-radius:6px; font-size:11.5px; color:var(--text2); line-height:1.6; display:none;">
+        <strong style="color:var(--amber)">⚠ 泳道圖提示</strong>：Mermaid.js 目前不支援真正的泳道（Swimlane）功能。生成的「泳道」實際上是從左到右排列的 subgraph 區塊，無法繪製垂直分隔線。如需標準泳道圖，建議使用 Visio、ProcessOn 或 Draw.io。
       </div>
     </div>
 
@@ -905,14 +1227,14 @@ body {
     <span id="status-text">就緒</span>
   </div>
   <div class="status-item" id="record-count" style="color:var(--text-dim)"></div>
-  <div style="margin-left:auto; opacity:0.4; font-size:10.5px;">Flowchart Generator v1.0 &nbsp;|&nbsp; Gemini Flash + Mermaid.js 10</div>
+  <div style="margin-left:auto; opacity:0.4; font-size:10.5px;">Flowchart Generator Pro v2.0 &nbsp;|&nbsp; 多模型 AI + Mermaid.js 11</div>
 </div>
 
 <script>
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
-const CONFIG_KEY  = 'fc_gen_config_v1';
+const CONFIG_KEY  = 'fc_gen_config_v2';
 const GITHUB_PATH = 'data/flowcharts.json';
 
 let cfg           = {};
@@ -920,9 +1242,12 @@ let flowcharts    = [];
 let currentId     = null;
 let renderTimer   = null;
 let currentZoom   = 1;
-let currentSha    = null;   // GitHub file sha for updates
+let currentSha    = null;
 let activeTab     = 'text';
 let pdfFile       = null;
+let currentTheme  = 'dark';
+let currentAIModel = 'gemini';
+let activeConfigTab = 'gemini';
 
 // ============================================================
 // INIT
@@ -934,46 +1259,112 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSplitter();
   loadConfigAndInit();
   loadFromURL();
+  setupConfigBarListeners();
 });
+
+function setupConfigBarListeners() {
+  ['direction-select', 'swimlane-select', 'pro-theme-select', 'node-style-select'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      // 更新泳道提示顯示
+      const swimlane = document.getElementById('swimlane-select').value;
+      const notice = document.getElementById('swimlane-notice');
+      if (notice) {
+        notice.style.display = (swimlane === 'force' || swimlane === 'auto') ? 'block' : 'none';
+      }
+      const code = document.getElementById('mermaid-code').value;
+      if (code.trim()) renderMermaid(code);
+    });
+  });
+}
 
 // ============================================================
 // CONFIG
 // ============================================================
 function loadConfigAndInit() {
   const raw = localStorage.getItem(CONFIG_KEY);
-  if (raw) {
-    try { cfg = JSON.parse(raw); } catch { cfg = {}; }
-  }
-  if (cfg.geminiKey && cfg.githubToken && cfg.githubRepo) {
+  if (raw) { try { cfg = JSON.parse(raw); } catch { cfg = {}; } }
+
+  const hasAI = cfg.geminiKey || cfg.deepseekKey || cfg.kimiKey || cfg.doubaoKey;
+
+  if (hasAI) {
     document.getElementById('config-modal').classList.add('hidden');
+    if (cfg.geminiKey)   document.getElementById('cfg-gemini').value = cfg.geminiKey;
+    if (cfg.deepseekKey) document.getElementById('cfg-deepseek').value = cfg.deepseekKey;
+    if (cfg.kimiKey)     document.getElementById('cfg-kimi').value = cfg.kimiKey;
+    if (cfg.doubaoKey)   document.getElementById('cfg-doubao').value = cfg.doubaoKey;
+    if (cfg.githubToken) document.getElementById('cfg-token').value = cfg.githubToken;
+    if (cfg.githubRepo)  document.getElementById('cfg-repo').value = cfg.githubRepo;
     init();
   } else {
-    // Pre-fill partial data
-    if (cfg.geminiKey)   document.getElementById('cfg-gemini').value = cfg.geminiKey;
-    if (cfg.githubToken) document.getElementById('cfg-token').value  = cfg.githubToken;
-    if (cfg.githubRepo)  document.getElementById('cfg-repo').value   = cfg.githubRepo;
+    if (cfg.githubToken) document.getElementById('cfg-token').value = cfg.githubToken;
+    if (cfg.githubRepo)  document.getElementById('cfg-repo').value = cfg.githubRepo;
   }
+}
+
+function switchConfigTab(tab) {
+  activeConfigTab = tab;
+  ['gemini','deepseek','kimi','doubao'].forEach(t => {
+    document.getElementById(`cfg-tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`cfg-panel-${t}`).classList.toggle('hidden', t !== tab);
+  });
+}
+
+function skipConfig() {
+  document.getElementById('config-modal').classList.add('hidden');
+  init();
+  toast('已跳過設定，部分功能可能無法使用', 'info');
 }
 
 function saveConfig() {
   const gemini = document.getElementById('cfg-gemini').value.trim();
-  const token  = document.getElementById('cfg-token').value.trim();
-  const repo   = document.getElementById('cfg-repo').value.trim();
-  if (!gemini || !token || !repo) {
-    toast('請填寫所有欄位', 'error');
-    return;
-  }
-  cfg = { geminiKey: gemini, githubToken: token, githubRepo: repo };
+  const deepseek = document.getElementById('cfg-deepseek').value.trim();
+  const kimi = document.getElementById('cfg-kimi').value.trim();
+  const doubao = document.getElementById('cfg-doubao').value.trim();
+  const token = document.getElementById('cfg-token').value.trim();
+  const repo = document.getElementById('cfg-repo').value.trim();
+
+  const hasAI = gemini || deepseek || kimi || doubao;
+  if (!hasAI) { toast('請至少配置一個 AI 模型 API Key', 'error'); return; }
+
+  cfg = {
+    geminiKey: gemini || cfg.geminiKey || '',
+    deepseekKey: deepseek || cfg.deepseekKey || '',
+    kimiKey: kimi || cfg.kimiKey || '',
+    doubaoKey: doubao || cfg.doubaoKey || '',
+    githubToken: token || cfg.githubToken || '',
+    githubRepo: repo || cfg.githubRepo || '',
+  };
   localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
   document.getElementById('config-modal').classList.add('hidden');
   init();
+  toast('設定已儲存 ✓', 'success');
 }
 
 function showConfig() {
-  document.getElementById('cfg-gemini').value = cfg.geminiKey  || '';
-  document.getElementById('cfg-token').value  = cfg.githubToken || '';
-  document.getElementById('cfg-repo').value   = cfg.githubRepo  || '';
+  document.getElementById('cfg-gemini').value = cfg.geminiKey || '';
+  document.getElementById('cfg-deepseek').value = cfg.deepseekKey || '';
+  document.getElementById('cfg-kimi').value = cfg.kimiKey || '';
+  document.getElementById('cfg-doubao').value = cfg.doubaoKey || '';
+  document.getElementById('cfg-token').value = cfg.githubToken || '';
+  document.getElementById('cfg-repo').value = cfg.githubRepo || '';
   document.getElementById('config-modal').classList.remove('hidden');
+}
+
+// ============================================================
+// AI MODEL SELECTION
+// ============================================================
+function setAIModel(model) {
+  currentAIModel = model;
+  ['gemini','deepseek','kimi','doubao'].forEach(m => {
+    document.getElementById(`model-${m}`).classList.toggle('active', m === model);
+  });
+  const statusMap = {
+    gemini: 'Gemini 2.5 Flash-Lite · 智能偵測泳道',
+    deepseek: 'DeepSeek V3 · 邏輯推理強',
+    kimi: 'Kimi K2.6 · 長文本處理',
+    doubao: '豆包 Pro · 中文理解佳',
+  };
+  document.getElementById('ai-status').textContent = statusMap[model];
 }
 
 // ============================================================
@@ -981,14 +1372,14 @@ function showConfig() {
 // ============================================================
 async function init() {
   setStatus('載入歷史記錄...', true);
-  await loadFlowcharts();
+  if (cfg.githubToken && cfg.githubRepo) await loadFlowcharts();
   renderHistoryList();
   setStatus('就緒', false);
 }
 
 async function refreshHistory() {
   setStatus('重整中...', true);
-  await loadFlowcharts();
+  if (cfg.githubToken && cfg.githubRepo) await loadFlowcharts();
   renderHistoryList();
   setStatus('就緒', false);
   toast('記錄已重整', 'info');
@@ -1011,25 +1402,16 @@ async function githubGet() {
     throw new Error(e.message || `GitHub ${res.status}`);
   }
   const json = await res.json();
-  const raw  = atob(json.content.replace(/\n/g, ''));
-  // Handle UTF-8 properly
-  const decoded = decodeURIComponent(
-    raw.split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')
-  );
+  const raw = atob(json.content.replace(/\n/g, ''));
+  const decoded = decodeURIComponent(raw.split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2,'0')).join(''));
   return { data: JSON.parse(decoded), sha: json.sha };
 }
 
 async function githubPut(data, sha) {
-  const url     = `https://api.github.com/repos/${cfg.githubRepo}/contents/${GITHUB_PATH}`;
-  const json    = JSON.stringify(data, null, 2);
-  // UTF-8 safe base64
-  const encoded = btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (_, p1) =>
-    String.fromCharCode(parseInt(p1, 16))
-  ));
-  const body = {
-    message: `[FC Gen] ${new Date().toLocaleString('zh-HK')}`,
-    content: encoded,
-  };
+  const url = `https://api.github.com/repos/${cfg.githubRepo}/contents/${GITHUB_PATH}`;
+  const json = JSON.stringify(data, null, 2);
+  const encoded = btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (_, p1) => String.fromCharCode(parseInt(p1, 16))));
+  const body = { message: `[FC Gen Pro] ${new Date().toLocaleString('zh-HK')}`, content: encoded };
   if (sha) body.sha = sha;
   const res = await fetch(url, {
     method: 'PUT',
@@ -1051,8 +1433,8 @@ async function githubPut(data, sha) {
 async function loadFlowcharts() {
   try {
     const { data, sha } = await githubGet();
-    flowcharts  = Array.isArray(data) ? data : [];
-    currentSha  = sha;
+    flowcharts = Array.isArray(data) ? data : [];
+    currentSha = sha;
     updateRecordCount();
   } catch(e) {
     console.error(e);
@@ -1070,17 +1452,20 @@ function renderHistoryList() {
     list.innerHTML = '<div class="history-empty">尚無記錄<br>輸入流程描述後點擊 AI 生成</div>';
     return;
   }
-  const sorted = [...flowcharts].sort((a, b) =>
-    new Date(b.updatedAt) - new Date(a.updatedAt)
-  );
-  list.innerHTML = sorted.map(fc => `
-    <div class="history-item ${fc.id === currentId ? 'active' : ''}"
-         onclick="loadFlowchart('${fc.id}')">
+  const sorted = [...flowcharts].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  list.innerHTML = sorted.map(fc => {
+    const modelTag = fc.aiModel ? `<span class="history-item-tag">${getModelLabel(fc.aiModel)}</span>` : '';
+    return `<div class="history-item ${fc.id === currentId ? 'active' : ''}" onclick="loadFlowchart('${fc.id}')">
       <button class="history-del" onclick="event.stopPropagation(); confirmDelete('${fc.id}')">✕</button>
       <div class="history-item-title">${escHtml(fc.title)}</div>
-      <div class="history-item-meta">${fmtDate(fc.updatedAt)}</div>
-    </div>
-  `).join('');
+      <div class="history-item-meta">${fmtDate(fc.updatedAt)} ${modelTag}</div>
+    </div>`;
+  }).join('');
+}
+
+function getModelLabel(model) {
+  const map = { gemini: 'Gemini', deepseek: 'DeepSeek', kimi: 'Kimi', doubao: '豆包' };
+  return map[model] || model;
 }
 
 function loadFlowchart(id) {
@@ -1089,6 +1474,12 @@ function loadFlowchart(id) {
   currentId = id;
   document.getElementById('diagram-title').value = fc.title || '';
   if (fc.inputText) document.getElementById('text-input').value = fc.inputText;
+  if (fc.settings) {
+    if (fc.settings.direction) document.getElementById('direction-select').value = fc.settings.direction;
+    if (fc.settings.swimlane) document.getElementById('swimlane-select').value = fc.settings.swimlane;
+    if (fc.settings.proTheme) document.getElementById('pro-theme-select').value = fc.settings.proTheme;
+    if (fc.settings.nodeStyle) document.getElementById('node-style-select').value = fc.settings.nodeStyle;
+  }
   const code = fc.mermaidCode || '';
   document.getElementById('mermaid-code').value = code;
   renderMermaid(code);
@@ -1099,8 +1490,8 @@ function loadFlowchart(id) {
 function newDiagram() {
   currentId = null;
   document.getElementById('diagram-title').value = '';
-  document.getElementById('text-input').value    = '';
-  document.getElementById('mermaid-code').value  = '';
+  document.getElementById('text-input').value = '';
+  document.getElementById('mermaid-code').value = '';
   document.getElementById('preview-output').innerHTML = emptyStateHTML();
   pdfFile = null;
   resetPdfZone();
@@ -1113,38 +1504,30 @@ function newDiagram() {
 // ============================================================
 async function saveDiagram() {
   const title = document.getElementById('diagram-title').value.trim();
-  const code  = document.getElementById('mermaid-code').value.trim();
+  const code = document.getElementById('mermaid-code').value.trim();
   if (!title) { toast('請輸入流程圖名稱', 'error'); return; }
-  if (!code)  { toast('尚無 Mermaid 代碼可儲存', 'error'); return; }
+  if (!code) { toast('尚無 Mermaid 代碼可儲存', 'error'); return; }
 
   setStatus('儲存中...', true);
   showLoading('上傳至 GitHub...');
 
   try {
-    // Re-fetch latest sha to avoid conflict
     const { sha } = await githubGet();
     const now = new Date().toISOString();
+    const settings = {
+      direction: document.getElementById('direction-select').value,
+      swimlane: document.getElementById('swimlane-select').value,
+      proTheme: document.getElementById('pro-theme-select').value,
+      nodeStyle: document.getElementById('node-style-select').value,
+    };
 
     if (currentId) {
       const idx = flowcharts.findIndex(f => f.id === currentId);
       if (idx >= 0) {
-        flowcharts[idx] = {
-          ...flowcharts[idx],
-          title,
-          mermaidCode: code,
-          inputText: document.getElementById('text-input').value,
-          updatedAt: now,
-        };
+        flowcharts[idx] = { ...flowcharts[idx], title, mermaidCode: code, inputText: document.getElementById('text-input').value, aiModel: currentAIModel, settings, updatedAt: now };
       }
     } else {
-      const newFc = {
-        id:         'fc_' + Date.now(),
-        title,
-        mermaidCode: code,
-        inputText:   document.getElementById('text-input').value,
-        createdAt:   now,
-        updatedAt:   now,
-      };
+      const newFc = { id: 'fc_' + Date.now(), title, mermaidCode: code, inputText: document.getElementById('text-input').value, aiModel: currentAIModel, settings, createdAt: now, updatedAt: now };
       flowcharts.push(newFc);
       currentId = newFc.id;
     }
@@ -1187,73 +1570,319 @@ async function generateFlowchart() {
   if (activeTab === 'text') {
     const text = document.getElementById('text-input').value.trim();
     if (!text) { toast('請輸入流程描述', 'error'); return; }
-    await callGemini({ text });
+    await callAI({ text });
   } else {
     if (!pdfFile) { toast('請先上傳 PDF 文件', 'error'); return; }
     const base64 = await toBase64(pdfFile);
-    await callGemini({ pdf: base64 });
+    await callAI({ pdf: base64 });
   }
 }
 
-async function callGemini({ text, pdf }) {
-  setStatus('調用 Gemini...', true);
-  showLoading('AI 正在分析業務流程...');
+function getUserSettings() {
+  const swimlane = document.getElementById('swimlane-select').value;
+  const notice = document.getElementById('swimlane-notice');
+  if (notice) {
+    notice.style.display = (swimlane === 'force' || swimlane === 'auto') ? 'block' : 'none';
+  }
+  return {
+    direction: document.getElementById('direction-select').value,
+    swimlane: swimlane,
+    proTheme: document.getElementById('pro-theme-select').value,
+    nodeStyle: document.getElementById('node-style-select').value,
+  };
+}
 
-  const systemPrompt = `你是資深業務流程分析師，專長將業務制度轉換為清晰的 Mermaid.js 流程圖。
+function buildSystemPrompt(settings) {
+  const direction = settings.direction === 'auto' ? 'LR（泳道圖必須使用 LR 方向，subgraph 從左到右排列成泳道）' : settings.direction;
+  const swimlane = settings.swimlane === 'auto' ? '涉及2個或以上部門/角色時自動使用 subgraph 劃分泳道' : 
+                   settings.swimlane === 'force' ? '強制使用 subgraph 劃分泳道，即使只有一個部門也建立泳道' : '不使用泳道';
+
+  const themeColors = {
+    professional: {
+      startEnd: 'fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5,font-weight:600',
+      process:  'fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe',
+      decision: 'fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7,font-weight:600',
+      docNode:  'fill:#3b0764,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff',
+      sysNode:  'fill:#1e293b,stroke:#94a3b8,stroke-width:1.5px,color:#e2e8f0',
+    },
+    audit: {
+      startEnd: 'fill:#1a365d,stroke:#63b3ed,stroke-width:2px,color:#bee3f8,font-weight:600',
+      process:  'fill:#2d3748,stroke:#a0aec0,stroke-width:1.5px,color:#e2e8f0',
+      decision: 'fill:#744210,stroke:#f6ad55,stroke-width:2px,color:#fefcbf,font-weight:600',
+      docNode:  'fill:#553c9a,stroke:#b794f4,stroke-width:1.5px,color:#e9d8fd',
+      sysNode:  'fill:#2c5282,stroke:#90cdf4,stroke-width:1.5px,color:#ebf8ff',
+    },
+    modern: {
+      startEnd: 'fill:#0f766e,stroke:#2dd4bf,stroke-width:2px,color:#ccfbf1,font-weight:600',
+      process:  'fill:#1e1b4b,stroke:#818cf8,stroke-width:1.5px,color:#e0e7ff',
+      decision: 'fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#ffedd5,font-weight:600',
+      docNode:  'fill:#581c87,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff',
+      sysNode:  'fill:#1e293b,stroke:#94a3b8,stroke-width:1.5px,color:#e2e8f0',
+    },
+    classic: {
+      startEnd: 'fill:#f0fdf4,stroke:#22c55e,stroke-width:2px,color:#14532d,font-weight:600',
+      process:  'fill:#eff6ff,stroke:#3b82f6,stroke-width:1.5px,color:#1e3a8a',
+      decision: 'fill:#fffbeb,stroke:#f59e0b,stroke-width:2px,color:#78350f,font-weight:600',
+      docNode:  'fill:#faf5ff,stroke:#a855f7,stroke-width:1.5px,color:#581c87',
+      sysNode:  'fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#334155',
+    },
+    blackwhite: {
+      startEnd: 'fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600',
+      process:  'fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000',
+      decision: 'fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600',
+      docNode:  'fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000',
+      sysNode:  'fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000',
+    },
+  };
+
+  const colors = themeColors[settings.proTheme] || themeColors.professional;
+  const nodeShapes = {
+    rounded: '開始/結束用圓角矩形 `id([文字])`，流程步驟用矩形 `id[文字]`，判定用菱形 `id{文字}`，文檔用 `id[/文字/]`',
+    sharp: '開始/結束用圓角矩形 `id([文字])`，流程步驟用矩形 `id[文字]`（直角），判定用菱形 `id{文字}`，文檔用 `id[/文字/]`',
+    mixed: '開始/結束用圓角矩形 `id([文字])`，核心流程用矩形 `id[文字]`，子流程用雙邊矩形 `id[[文字]]`，判定用菱形 `id{文字}`，文檔用 `id[/文字/]`',
+  };
+
+  return `你是資深業務流程分析師及內部審計專家，專長將業務制度轉換為清晰、專業的 Mermaid.js 流程圖。
 
 【輸出規則 — 必須嚴格遵守】
 1. 只輸出純 Mermaid 代碼，不要有任何說明文字、標題或 markdown 代碼塊符號（不要 \`\`\`）
 2. 第一行必須是 Mermaid 方向宣告（例如 flowchart TD），不可有任何前置文字
 3. 所有節點文字、條件標籤、subgraph 標題必須使用繁體中文
 4. 節點 ID 只用英文字母或數字（如 A、B1、step1），不可用中文或保留字
-5. 禁止使用以下 Mermaid 保留字作為節點 ID：end、graph、flowchart、subgraph、style、classDef、click、direction
+5. 禁止使用以下 Mermaid 保留字作為節點 ID：end、graph、flowchart、style、classDef、click
+   ⚠️ 注意：subgraph 和 direction 是 Mermaid 關鍵字，只能用作 subgraph 區塊和方向宣告，不能作為節點 ID
 6. 節點標籤文字內禁止使用半形圓括號 ( )，如需標注縮寫請改用全形括號（）或方括號〔〕
 
-【流程圖要求】
-• 方向：flowchart TD（預設由上至下）；涉及多部門時可用 LR（由左至右）
-• 節點類型（必須嚴格對應以下 symbol）：
-  - 開始/結束  → ([開始]) / ([結束])
-  - 一般步驟   → [步驟名稱]
-  - 決策/判斷  → {判斷條件？}
-  - 文件/表單  → [/文件名稱/]
-  - 系統操作   → [[系統名稱]]
-• 泳道：涉及2個或以上部門/角色時，必須用 subgraph 劃分
-• 審批節點：明確標示通過／拒絕兩條分支
-• 連線標籤：重要條件用 -- 條件 --> 標示
+【方向設定】
+• 流程方向：${direction}
 
-【樣式要求 — 必須加入以下 classDef 並為每個節點套用對應 class】
+【泳道設定】
+• ${swimlane}
+
+【泳道 subgraph 語法規範 — 必須嚴格遵守】
+⚠️ 重要：Mermaid.js 的 subgraph 不是真正的泳道（Swimlane），它無法繪製垂直分隔線。
+但通過正確的語法，可以模擬出類似泳道的效果：每個 subgraph 是一個「區塊」，從左到右排列。
+
+【目標效果】
+參考標準泳道圖（如 ProcessOn 範例）：
+- 每個部門/角色佔一欄（垂直方向）
+- 節點在欄內垂直排列（由上至下）
+- 跨欄的連線水平連接
+- 欄頂部有部門名稱標題
+
+【Mermaid 實現策略 — Subgraph 模擬泳道】
+由於 Mermaid subgraph 的限制，使用以下策略：
+
+1. 主方向必須是 flowchart LR（subgraph 從左到右排列）
+2. 每個 subgraph 代表一個「泳道欄」
+3. subgraph 內部使用 direction TB（節點垂直排列）
+4. ⚠️ 關鍵：所有連線（包括 subgraph 內部節點之間的連線）必須放在 subgraph 外部！
+   這是避免 direction TB 被覆蓋的唯一方法。
+
+【正確語法結構】
+flowchart LR
+  %% 定義 classDef（在主方向宣告後）
+  classDef startEnd fill:#...,stroke:#...,...
+  classDef process fill:#...,stroke:#...,...
+
+  %% 定義 subgraph（泳道欄）— 只放節點定義, 不放連線
+  subgraph 招聘專員["👤 招聘專員"]
+    direction TB
+    A[篩選簡歷]
+    B[通過初篩簡歷]
+    C[與候選人預約面試時間]
+    D[與面試官確認面試時間]
+  end
+  subgraph 業務主管["👔 業務主管"]
+    direction TB
+    E[篩選簡歷]
+    F[需要約定面試履歷]
+    G[面試]
+    H{是否通過}
+  end
+  subgraph 人力資源主管["💼 人力資源主管"]
+    direction TB
+    I[人資面試]
+    J{是否通過}
+    K[談薪資及相關制度]
+    L{是否達成共識}
+    M([通知入職])
+    N([回覆候選人])
+  end
+
+  %% 所有連線放在 subgraph 外部
+  A --> B
+  B --> C
+  C --> D
+  E --> F
+  F --> G
+  G --> H
+  I --> J
+  J --> K
+  K --> L
+  L --> M
+  B --> E
+  D --> G
+  H -- 通過 --> I
+  H -- 未通過 --> N
+  J -- 通過 --> K
+  L -- 否 --> N
+
+  %% 套用樣式
+  class A,M,N startEnd
+  class B,C,D,E,F,G,I,K process
+  class H,J,L decision
+
+【關鍵規則】
+1. subgraph 內部只能有節點定義（A[文字]）, 絕對不能有連線（-->）
+2. 所有連線必須在 subgraph 外部
+3. 每個 subgraph 必須有明確標題：subgraph 名稱["🏢 部門名稱"]
+4. 主方向 flowchart LR, subgraph 內部 direction TB
+5. 泳道數量建議 2-5 個, 過多會導致圖表過寬
+6. 節點 ID 只用英文/數字, 文字用繁體中文
+
+【常見錯誤 — 絕對避免】
+❌ 錯誤：subgraph 內部放連線
+  subgraph 部門A
+    A --> B  ← 這會導致 direction TB 被覆蓋！
+  end
+
+✅ 正確：連線全部放在外部
+  subgraph 部門A
+    A[步驟A]
+    B[步驟B]
+  end
+  A --> B  ← 連線在外部
+
+【替代方案：如果 Mermaid 泳道效果不佳】
+如果生成的泳道圖比例嚴重失衡或無法閱讀，請：
+1. 改用「不使用泳道」選項，生成標準流程圖
+2. 或使用 Visio、ProcessOn、Draw.io 等專業工具繪製泳道圖
+3. 或將 Mermaid 生成的 SVG 導入到 Draw.io 中手動調整布局
+
+【節點形狀規範】
+【黑白主題 classDef 範例】
+當用戶選擇黑白主題時，使用以下 classDef：
+  classDef startEnd fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600
+  classDef process fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000
+  classDef decision fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600
+  classDef docNode fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000
+
+【泳道布局最佳實踐】
+1. 主方向使用 flowchart LR（由左至右），subgraph 從左到右排列成泳道
+2. 每個 subgraph（泳道）內部使用 direction TB，節點在泳道內垂直排列
+3. 跨泳道連線在 subgraph 外部定義
+4. 泳道排列順序由 subgraph 定義順序決定（從左到右）
+5. 為了獲得最佳泳道效果：
+   - 每個泳道使用 subgraph 定義，標題用繁體中文部門名稱
+   - 泳道內部節點垂直排列（direction TB）
+   - 跨泳道連線在 subgraph 外部定義
+   - 使用 classDef 為不同類型節點設置樣式
+6. 參考範例結構：
+   flowchart LR
+     subgraph 部門A["🏢 部門A"]
+       direction TB
+       A[步驟1]
+       B[步驟2]
+     end
+     subgraph 部門B["🏢 部門B"]
+       direction TB
+       C[步驟3]
+       D[步驟4]
+     end
+     A --> B
+     B --> C
+     C --> D
+     D --> E([結束])
+
+【標準流程圖符號規範 — 嚴格遵循】
+根據業界標準流程圖符號（參考 ISO 5807 / GB/T 1526）：
+• 開始/結束：圓角矩形（Stadium） 語法：id([文字])
+• 流程/步驟：矩形               語法：id[文字]
+• 判定/決策：菱形               語法：id{文字}
+• 文檔/表單：文檔形狀            語法：id[/文字/]
+• 子流程：雙邊矩形              語法：id[[文字]]
+• 數據庫/存儲：圓柱體           語法：id[(文字)]
+• 跨頁引用/連接：圓形           語法：id((文字))
+• 手動輸入：梯形               語法：id[/文字\] 或 id[\文字/]
+
+【連線規範】
+• 正常流程：--> 或 --->
+• 帶條件標籤：-- 條件文字 -->
+• 重要決策分支：明確標示「是/否」、「通過/未通過」、「批准/退回」等
+• 返回/循環：使用虛線或註釋標示
+
+【節點形狀規範】
+• ${nodeShapes[settings.nodeStyle] || nodeShapes.rounded}
+• 條件判斷：使用菱形 \`id{Text}\`
+• 文件/表單：使用平行四邊形 \`id[/Text/]\` 或文檔形狀 \`id[/Text/]\`
+• 外部系統/數據庫：使用圓柱體 \`id[(Text)]\`
+• 開始/結束節點：\`id([開始])\` 和 \`id([結束])\`
+
+【專業主題樣式 — 必須加入以下 classDef 並為每個節點套用對應 class】
 在 flowchart 宣告後立即加入：
-  classDef startEnd fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5,font-weight:600
-  classDef process  fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe
-  classDef decision fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7,font-weight:600
-  classDef docNode  fill:#3b0764,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff
-  classDef sysNode  fill:#1e293b,stroke:#94a3b8,stroke-width:1.5px,color:#e2e8f0
-並在所有節點定義後，用 class 指令套用：
+  classDef startEnd ${colors.startEnd}
+  classDef process  ${colors.process}
+  classDef decision ${colors.decision}
+  classDef docNode  ${colors.docNode}
+  classDef sysNode  ${colors.sysNode}
+並在所有節點定義後，用 class 指令套用（⚠️ 每個 class 只定義一次，禁止重複）：
   class <開始節點ID>,<結束節點ID> startEnd
   class <步驟節點ID列表> process
   class <決策節點ID列表> decision
   class <文件節點ID列表> docNode
   class <系統節點ID列表> sysNode
-• 確保代碼語法正確、完整可運行`;
 
-  const parts = pdf
-    ? [
-        { inline_data: { mime_type: 'application/pdf', data: pdf } },
-        { text: systemPrompt + '\n\n請分析以上 PDF 文件中的業務流程，生成完整流程圖。' },
-      ]
-    : [
-        { text: systemPrompt + '\n\n【業務流程描述】\n' + text },
-      ];
+【class 語法規則】
+• 正確：class P1,P2,P3 process
+• 錯誤：class P1, P2, P3 process（逗號後不能有空格）
+• 錯誤：重複定義同一個 class（如先 class P1 startEnd 後又 class P1 process）
+• 每個節點 ID 只能屬於一個 class
+
+【線條美化】
+• 強制使用平滑曲線：在 init 中加入 'flowchart': { 'curve': 'basis' }
+• 連線標籤：重要條件用 -- 條件 --> 標示
+• 審批節點：明確標示通過／拒絕兩條分支
+
+【Mermaid init 設定 — 必須放在代碼最上方】
+%%{init: {'theme': 'neutral', 'themeVariables': { 'primaryColor': '#F4F5F7', 'edgeColor': '#4A5568', 'lineColor': '#4A5568'}, 'flowchart': { 'curve': 'basis', 'padding': 24, 'nodeSpacing': 50, 'rankSpacing': 70, 'subgraphMargin': 20, 'useMaxWidth': true }}}%%
+
+【泳道圖專用 init 設定】
+當生成泳道圖時，使用以下 init 設定：
+%%{init: {'theme': 'neutral', 'flowchart': { 'curve': 'basis', 'padding': 24, 'nodeSpacing': 50, 'rankSpacing': 70, 'subgraphMargin': 20, 'useMaxWidth': true }}}%%
+注意：Mermaid 沒有真正的泳道功能，subgraph 只是從左到右排列的區塊。
+
+【審計專用要求】
+• 標示關鍵控制點（KCP）節點
+• 標示風險點（RISK）節點
+• 涉及審批的節點標示授權級別
+• 文件傳遞節點標示表單編號（如有）
+• 確保代碼語法正確、完整可運行`;
+}
+
+async function callAI({ text, pdf }) {
+  setStatus('調用 AI...', true);
+  showLoading('AI 正在分析業務流程...');
+
+  const settings = getUserSettings();
+  const systemPrompt = buildSystemPrompt(settings);
 
   try {
-    const result = await callGeminiWithFallback(parts);
+    let result;
+    switch (currentAIModel) {
+      case 'gemini': result = await callGemini(systemPrompt, text, pdf); break;
+      case 'deepseek': result = await callDeepSeek(systemPrompt, text, pdf); break;
+      case 'kimi': result = await callKimi(systemPrompt, text, pdf); break;
+      case 'doubao': result = await callDoubao(systemPrompt, text, pdf); break;
+      default: result = await callGemini(systemPrompt, text, pdf);
+    }
+
     const code = cleanMermaid(result.text);
     const modelUsed = result.model;
 
     document.getElementById('mermaid-code').value = code;
     await renderMermaid(code);
 
-    // Auto-suggest title if blank
     if (!document.getElementById('diagram-title').value.trim()) {
       autoTitle(code, text);
     }
@@ -1269,7 +1898,19 @@ async function callGemini({ text, pdf }) {
   }
 }
 
-async function callGeminiWithFallback(parts) {
+// ============================================================
+// GEMINI API
+// ============================================================
+async function callGemini(systemPrompt, text, pdf) {
+  const parts = pdf
+    ? [
+        { inline_data: { mime_type: 'application/pdf', data: pdf } },
+        { text: systemPrompt + '\n\n請分析以上 PDF 文件中的業務流程，生成完整流程圖。' },
+      ]
+    : [
+        { text: systemPrompt + '\n\n【業務流程描述】\n' + text },
+      ];
+
   const models = ['gemini-2.5-flash-lite', 'gemini-1.5-flash'];
   let lastErr;
   for (const model of models) {
@@ -1280,13 +1921,10 @@ async function callGeminiWithFallback(parts) {
           body: JSON.stringify({ contents: [{ parts }] }) }
       );
       const data = await res.json().catch(() => ({}));
-      console.log(`[Gemini] ${model} → HTTP ${res.status}`, data.error?.status || 'OK');
       if (!res.ok || data.error) {
-        const msg    = data.error?.message || '';
+        const msg = data.error?.message || '';
         const status = data.error?.status || '';
-        const isQuota = res.status === 429 || status === 'RESOURCE_EXHAUSTED'
-          || msg.toLowerCase().includes('quota')
-          || msg.toLowerCase().includes('resource_exhausted');
+        const isQuota = res.status === 429 || status === 'RESOURCE_EXHAUSTED' || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('resource_exhausted');
         if (isQuota) {
           lastErr = { quota: true, model, msg };
           toast(`${model} 配額已滿，嘗試備用模型…`, 'info');
@@ -1294,8 +1932,8 @@ async function callGeminiWithFallback(parts) {
         }
         throw new Error(`[${res.status}${status ? ' '+status : ''}] ${msg || '未知錯誤'}`);
       }
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return { text, model };
+      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return { text: txt, model };
     } catch(e) {
       if (e.message?.includes('fetch') || e.name === 'TypeError') throw e;
       if (!lastErr?.quota) throw e;
@@ -1306,21 +1944,113 @@ async function callGeminiWithFallback(parts) {
   throw new Error(`所有 Gemini 模型配額已用盡 ${retrySec}｜請稍後再試`);
 }
 
+// ============================================================
+// DEEPSEEK API
+// ============================================================
+async function callDeepSeek(systemPrompt, text, pdf) {
+  if (pdf) throw new Error('DeepSeek 暫不支援 PDF 上傳，請使用文字輸入');
+
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.deepseekKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text }
+      ],
+      temperature: 0.3,
+      max_tokens: 4096,
+    }),
+  });
+
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `DeepSeek ${res.status}`);
+  }
+  const data = await res.json();
+  return { text: data.choices?.[0]?.message?.content || '', model: 'DeepSeek-V3' };
+}
+
+// ============================================================
+// KIMI (MOONSHOT) API
+// ============================================================
+async function callKimi(systemPrompt, text, pdf) {
+  if (pdf) throw new Error('Kimi 暫不支援 PDF 上傳，請使用文字輸入');
+
+  const res = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.kimiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'moonshot-v1-8k',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text }
+      ],
+      temperature: 0.3,
+      max_tokens: 4096,
+    }),
+  });
+
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `Kimi ${res.status}`);
+  }
+  const data = await res.json();
+  return { text: data.choices?.[0]?.message?.content || '', model: 'Kimi-K2.6' };
+}
+
+// ============================================================
+// DOUBAO (VOLCANO ENGINE) API
+// ============================================================
+async function callDoubao(systemPrompt, text, pdf) {
+  if (pdf) throw new Error('豆包暫不支援 PDF 上傳，請使用文字輸入');
+
+  const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${cfg.doubaoKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'doubao-pro-32k',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text }
+      ],
+      temperature: 0.3,
+      max_tokens: 4096,
+    }),
+  });
+
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `豆包 ${res.status}`);
+  }
+  const data = await res.json();
+  return { text: data.choices?.[0]?.message?.content || '', model: 'Doubao-Pro' };
+}
+
+// ============================================================
+// CODE CLEANING
+// ============================================================
 function cleanMermaid(raw) {
   let s = raw.trim();
   // Extract content from fenced code block if present
   const fenced = s.match(/```(?:mermaid)?\s*\n?([\s\S]*?)```/i);
   if (fenced) s = fenced[1].trim();
   else {
-    // Strip loose backtick fences
     s = s.replace(/^```(?:mermaid)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-    // Skip any preamble text before the first Mermaid directive
     const directiveIdx = s.search(/^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap)\b/im);
     if (directiveIdx > 0) s = s.slice(directiveIdx).trim();
-    // Remove trailing prose: only strip lines that start with a Chinese/English sentence
-    // and contain no Mermaid syntax characters at all
     const MERMAID_KEYWORDS = /^(end|class|classDef|style|linkStyle|subgraph|click|direction)\b/;
-    const HAS_SYNTAX = /[{}\[\]()>|\/\\@#%^*=~`]/;
+    const HAS_SYNTAX = /[{}\[\]()>|/\\@#%^*=~`]/;
     const lines = s.split('\n');
     let last = lines.length - 1;
     while (last > 0) {
@@ -1330,19 +2060,77 @@ function cleanMermaid(raw) {
     }
     s = lines.slice(0, last + 1).join('\n').trim();
   }
-  // Replace ASCII parentheses inside node labels with full-width to avoid parser confusion
-  // Matches content inside [ ], { }, [/ /] etc. but not the shape delimiters themselves
+
+  // Fix 1: Remove duplicate class definitions
+  const seenClasses = new Set();
+  s = s.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('class ') && !trimmed.startsWith('classDef ')) {
+      const normalized = trimmed.replace(/,\s+/g, ',');
+      if (seenClasses.has(normalized)) {
+        return '';
+      }
+      seenClasses.add(normalized);
+      return normalized;
+    }
+    return line;
+  }).filter(line => line !== '').join('\n');
+
+  // Fix 2: Deduplicate node-to-class assignments
+  const nodeClassMap = new Map();
+  s.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('class ') && !trimmed.startsWith('classDef ')) {
+      const match = trimmed.match(/^class\s+([\w,]+)\s+(\w+)$/);
+      if (match) {
+        const nodes = match[1].split(',');
+        const className = match[2];
+        nodes.forEach(node => {
+          if (!nodeClassMap.has(node)) {
+            nodeClassMap.set(node, className);
+          }
+        });
+      }
+    }
+  });
+
+  // Rebuild class lines from nodeClassMap
+  const classGroups = new Map();
+  nodeClassMap.forEach((className, node) => {
+    if (!classGroups.has(className)) {
+      classGroups.set(className, []);
+    }
+    classGroups.get(className).push(node);
+  });
+
+  // Replace all class lines with deduplicated ones
+  let hasClassLines = false;
+  s = s.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('class ') && !trimmed.startsWith('classDef ')) {
+      if (!hasClassLines) {
+        hasClassLines = true;
+        return Array.from(classGroups.entries())
+          .map(([className, nodes]) => `class ${nodes.join(',')} ${className}`)
+          .join('\n');
+      }
+      return '';
+    }
+    return line;
+  }).filter(line => line !== '').join('\n');
+
+  // Fix 3: Replace ASCII parentheses inside node labels
   s = s.replace(/(\[{1,2}\/?)([^\][\n]+?)(\/?]{1,2})/g, (_, o, text, c) =>
     o + text.replace(/\((?![\[\(])/g, '（').replace(/\)(?![\]\)])/g, '）') + c
   );
   s = s.replace(/\{([^{}\n]+?)\}/g, (_, text) =>
     '{' + text.replace(/\((?![\[\(])/g, '（').replace(/\)(?![\]\)])/g, '）') + '}'
   );
+
   return s;
 }
 
 function autoTitle(code, inputText) {
-  // Try to extract a subgraph name or use first sentence of text
   const sg = code.match(/subgraph\s+([^\n{[]+)/);
   if (sg) {
     document.getElementById('diagram-title').value = sg[1].trim() + '流程圖';
@@ -1370,13 +2158,36 @@ async function renderMermaid(code) {
   try {
     const uid = 'fc_svg_' + Date.now();
     const { svg } = await mermaid.render(uid, code);
-    out.innerHTML = `<div id="svg-wrap" style="transform-origin:top center; transform:scale(${currentZoom}); transition:transform 0.2s;">${svg}</div>`;
+
+    out.innerHTML = `<div id="svg-wrap" style="transform-origin:top left; transform:scale(${currentZoom}); transition:transform 0.2s; display:inline-block; max-width:100%;">${svg}</div>`;
+
     const svgEl = out.querySelector('svg');
     if (svgEl) {
-      svgEl.style.maxWidth = '100%';
-      svgEl.style.height   = 'auto';
-      if (currentTheme === 'dark') enhanceMermaidSVG(svgEl);
-      else enhanceMermaidSVGLight(svgEl);
+      svgEl.style.maxWidth = 'none';  // 允許 SVG 超出容器以顯示完整泳道
+      svgEl.style.height = 'auto';
+      svgEl.style.display = 'block';
+
+      const hasSubgraph = code.includes('subgraph');
+      if (hasSubgraph) {
+        // 泳道圖: 允許水平和垂直滾動, 靠左對齊
+        out.style.overflowX = 'auto';
+        out.style.overflowY = 'auto';
+        out.style.justifyContent = 'flex-start';
+        out.style.alignItems = 'flex-start';
+        out.style.width = '100%';
+        out.style.minHeight = '100%';
+      } else {
+        out.style.overflowX = 'auto';
+        out.style.overflowY = 'auto';
+        out.style.justifyContent = 'center';
+        out.style.alignItems = 'flex-start';
+      }
+
+      if (document.getElementById('auto-enhance').checked) {
+        if (currentTheme === 'dark') enhanceMermaidSVG(svgEl);
+        else enhanceMermaidSVGLight(svgEl);
+      }
+      setupNodeEditing(svgEl);
     }
   } catch(e) {
     out.innerHTML = `<div class="error-box">⚠ Mermaid 語法錯誤<br><br>${escHtml(String(e.message || e))}</div>`;
@@ -1385,17 +2196,109 @@ async function renderMermaid(code) {
 
 function enhanceMermaidSVG(svg) {
   const NS = 'http://www.w3.org/2000/svg';
+  const proTheme = document.getElementById('pro-theme-select')?.value || 'professional';
 
-  // Inject gradient definitions
+  // 黑白主題：不應用漸層，保持簡潔黑白風格
+  if (proTheme === 'blackwhite') {
+    const style = document.createElementNS(NS, 'style');
+    style.textContent = `
+      .node rect, .node polygon, .node circle, .node ellipse, .node path {
+        fill: #ffffff !important;
+        stroke: #000000 !important;
+        stroke-width: 1.5px !important;
+        filter: none !important;
+      }
+      .node polygon { stroke-width: 1.5px !important; }
+      .node circle, .node path { stroke-width: 2px !important; }
+      .cluster rect {
+        fill: #fafafa !important;
+        stroke: #333333 !important;
+        stroke-width: 1px !important;
+        stroke-dasharray: none !important;
+        filter: none !important;
+      }
+      .edgePath path {
+        stroke: #000000 !important;
+        stroke-width: 1.5px !important;
+      }
+      marker path { fill: #000000 !important; }
+      .edgeLabel foreignObject div {
+        background: #ffffff !important;
+        border: 1px solid #000000 !important;
+        border-radius: 2px !important;
+        padding: 1px 4px !important;
+        font-size: 11px !important;
+        font-weight: 500 !important;
+        color: #000000 !important;
+      }
+      .nodeLabel, .label { 
+        font-weight: 500 !important; 
+        color: #000000 !important;
+      }
+      .cluster-label { 
+        font-weight: 600 !important; 
+        font-size: 13px !important;
+        color: #000000 !important;
+      }
+    `;
+    svg.insertBefore(style, svg.firstChild);
+    return;
+  }
+
   let defs = svg.querySelector('defs');
   if (!defs) { defs = document.createElementNS(NS, 'defs'); svg.insertBefore(defs, svg.firstChild); }
 
+  const themeGradients = {
+    professional: {
+      process:  { c0: '#1e4080', c1: '#0d2137', stroke: '#3b82f6' },
+      decision: { c0: '#7c3500', c1: '#3d1a00', stroke: '#f59e0b' },
+      terminal: { c0: '#065f46', c1: '#022c22', stroke: '#34d399' },
+      doc:      { c0: '#3b0764', c1: '#1a0530', stroke: '#c084fc' },
+      system:   { c0: '#1e293b', c1: '#0f172a', stroke: '#94a3b8' },
+      edge:     '#60a5fa',
+      cluster:  { fill: '#0a1929', stroke: '#2563eb' },
+      labelBg:  { bg: '#162033', border: '#3b82f6', text: '#93c5fd' },
+    },
+    audit: {
+      process:  { c0: '#1e3a5f', c1: '#0c1a2e', stroke: '#60a5fa' },
+      decision: { c0: '#744210', c1: '#3d1f00', stroke: '#f6ad55' },
+      terminal: { c0: '#1a365d', c1: '#0c1a2e', stroke: '#63b3ed' },
+      doc:      { c0: '#553c9a', c1: '#2d1b5e', stroke: '#b794f4' },
+      system:   { c0: '#2c5282', c1: '#1a365d', stroke: '#90cdf4' },
+      edge:     '#90cdf4',
+      cluster:  { fill: '#0a1628', stroke: '#3182ce' },
+      labelBg:  { bg: '#0f1e35', border: '#3182ce', text: '#bee3f8' },
+    },
+    modern: {
+      process:  { c0: '#1e1b4b', c1: '#0f0e2e', stroke: '#818cf8' },
+      decision: { c0: '#7c2d12', c1: '#3d1508', stroke: '#fb923c' },
+      terminal: { c0: '#0f766e', c1: '#064e46', stroke: '#2dd4bf' },
+      doc:      { c0: '#581c87', c1: '#2d0f44', stroke: '#c084fc' },
+      system:   { c0: '#1e293b', c1: '#0f172a', stroke: '#94a3b8' },
+      edge:     '#2dd4bf',
+      cluster:  { fill: '#0c0f1a', stroke: '#4f9eff' },
+      labelBg:  { bg: '#131826', border: '#4f9eff', text: '#93c5fd' },
+    },
+    classic: {
+      process:  { c0: '#dbeafe', c1: '#bfdbfe', stroke: '#3b82f6' },
+      decision: { c0: '#fef3c7', c1: '#fde68a', stroke: '#f59e0b' },
+      terminal: { c0: '#dcfce7', c1: '#bbf7d0', stroke: '#22c55e' },
+      doc:      { c0: '#f3e8ff', c1: '#e9d5ff', stroke: '#a855f7' },
+      system:   { c0: '#f1f5f9', c1: '#e2e8f0', stroke: '#64748b' },
+      edge:     '#475569',
+      cluster:  { fill: '#f8fafc', stroke: '#94a3b8' },
+      labelBg:  { bg: '#ffffff', border: '#cbd5e1', text: '#334155' },
+    },
+  };
+
+  const t = themeGradients[proTheme] || themeGradients.professional;
+
   const grads = [
-    { id: 'fc-grad-process',  c0: '#1e4080', c1: '#0d2137' },
-    { id: 'fc-grad-decision', c0: '#7c3500', c1: '#3d1a00' },
-    { id: 'fc-grad-terminal', c0: '#065f46', c1: '#022c22' },
-    { id: 'fc-grad-doc',      c0: '#3b0764', c1: '#1a0530' },
-    { id: 'fc-grad-system',   c0: '#1e293b', c1: '#0f172a' },
+    { id: 'fc-grad-process',  c0: t.process.c0,  c1: t.process.c1 },
+    { id: 'fc-grad-decision', c0: t.decision.c0, c1: t.decision.c1 },
+    { id: 'fc-grad-terminal', c0: t.terminal.c0, c1: t.terminal.c1 },
+    { id: 'fc-grad-doc',      c0: t.doc.c0,      c1: t.doc.c1 },
+    { id: 'fc-grad-system',   c0: t.system.c0,   c1: t.system.c1 },
   ];
   grads.forEach(({ id, c0, c1 }) => {
     if (defs.querySelector(`#${id}`)) return;
@@ -1407,59 +2310,48 @@ function enhanceMermaidSVG(svg) {
     defs.appendChild(g);
   });
 
-  // Inject enhancement CSS
   const style = document.createElementNS(NS, 'style');
   style.textContent = `
-    /* Process rectangles → blue gradient */
     .node rect {
       fill: url(#fc-grad-process) !important;
-      stroke: #3b82f6 !important; stroke-width: 1.5px !important;
-      filter: drop-shadow(0 3px 8px rgba(59,130,246,0.35));
+      stroke: ${t.process.stroke} !important; stroke-width: 1.5px !important;
+      filter: drop-shadow(0 3px 8px ${t.process.stroke}55);
     }
-    /* Decision diamonds → amber gradient */
     .node polygon {
       fill: url(#fc-grad-decision) !important;
-      stroke: #f59e0b !important; stroke-width: 2px !important;
-      filter: drop-shadow(0 3px 8px rgba(245,158,11,0.35));
+      stroke: ${t.decision.stroke} !important; stroke-width: 2px !important;
+      filter: drop-shadow(0 3px 8px ${t.decision.stroke}55);
     }
-    /* Circle nodes → teal */
     .node circle {
       fill: url(#fc-grad-terminal) !important;
-      stroke: #34d399 !important; stroke-width: 2px !important;
-      filter: drop-shadow(0 3px 8px rgba(52,211,153,0.4));
+      stroke: ${t.terminal.stroke} !important; stroke-width: 2px !important;
+      filter: drop-shadow(0 3px 8px ${t.terminal.stroke}66);
     }
-    /* Stadium/pill paths (start & end) → teal */
     .node path {
       fill: url(#fc-grad-terminal) !important;
-      stroke: #34d399 !important; stroke-width: 2px !important;
-      filter: drop-shadow(0 3px 8px rgba(52,211,153,0.4));
+      stroke: ${t.terminal.stroke} !important; stroke-width: 2px !important;
+      filter: drop-shadow(0 3px 8px ${t.terminal.stroke}66);
     }
-    /* Subgraph cluster containers */
     .cluster rect {
-      fill: #0a1929 !important;
-      stroke: #2563eb !important; stroke-width: 1.5px !important;
+      fill: ${t.cluster.fill} !important;
+      stroke: ${t.cluster.stroke} !important; stroke-width: 1.5px !important;
       stroke-dasharray: 6,3 !important;
       filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
     }
-    /* Edges — thicker, brighter */
     .edgePath path {
-      stroke: #60a5fa !important; stroke-width: 2px !important;
+      stroke: ${t.edge} !important; stroke-width: 2px !important;
     }
-    /* Arrow markers */
-    marker path { fill: #60a5fa !important; }
-    /* Edge label chips */
+    marker path { fill: ${t.edge} !important; }
     .edgeLabel foreignObject div {
-      background: #162033 !important;
-      border: 1px solid #3b82f6 !important;
+      background: ${t.labelBg.bg} !important;
+      border: 1px solid ${t.labelBg.border} !important;
       border-radius: 4px !important;
       padding: 1px 6px !important;
       font-size: 11px !important; font-weight: 600 !important;
-      color: #93c5fd !important;
+      color: ${t.labelBg.text} !important;
     }
-    /* Node text */
-    .nodeLabel, .label { font-weight: 500 !important; letter-spacing: 0.01em !important; }
-    /* Subgraph title */
-    .cluster-label { font-weight: 600 !important; font-size: 13px !important; }
+    .nodeLabel, .label { font-weight: 500 !important; letter-spacing: 0.01em !important; font-family: 'Arial', sans-serif !important; }
+    .cluster-label { font-weight: 600 !important; font-size: 13px !important; font-family: 'Arial', sans-serif !important; }
   `;
   svg.insertBefore(style, svg.firstChild);
 }
@@ -1495,14 +2387,237 @@ function setupCodeEditor() {
 }
 
 // ============================================================
+// NODE EDITING (Visual)
+// ============================================================
+let editingNodeId = null;
+let editingNodeShape = null;
+
+function setupNodeEditing(svgEl) {
+  const nodes = svgEl.querySelectorAll('.node');
+  nodes.forEach(node => {
+    node.style.cursor = 'pointer';
+    node.title = '雙擊編輯節點文字';
+    node.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      openNodeEditor(node);
+    });
+  });
+}
+
+function openNodeEditor(nodeEl) {
+  const code = document.getElementById('mermaid-code').value;
+  if (!code.trim()) return;
+
+  const nodeId = extractNodeId(nodeEl);
+  if (!nodeId) {
+    toast('無法識別此節點，請直接在代碼編輯器中修改', 'info');
+    return;
+  }
+
+  editingNodeId = nodeId;
+  const currentText = extractNodeText(code, nodeId);
+  if (currentText === null) {
+    toast('無法讀取節點文字，請直接在代碼編輯器中修改', 'info');
+    return;
+  }
+
+  editingNodeShape = detectNodeShape(code, nodeId);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'node-editor-overlay';
+  overlay.id = 'node-editor-overlay';
+  overlay.innerHTML = `
+    <div class="node-editor-box">
+      <div class="modal-title">✏️ 編輯節點</div>
+      <div class="modal-desc">修改節點文字，確認後自動更新流程圖</div>
+      <label class="form-label">節點 ID</label>
+      <div class="node-editor-preview">${escHtml(nodeId)} <span style="color:var(--text-dim)">(${editingNodeShape})</span></div>
+      <label class="form-label">節點文字</label>
+      <input class="form-input" type="text" id="node-edit-input" value="${escHtml(currentText)}" placeholder="輸入節點文字..." autocomplete="off">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;margin-bottom:16px;">
+        💡 提示：修改後會自動重新渲染流程圖。如需更複雜的修改，請使用左側代碼編輯器。
+      </div>
+      <div class="modal-footer" style="margin-top:0;">
+        <button class="btn btn-ghost" onclick="closeNodeEditor()">取消</button>
+        <button class="btn btn-primary" onclick="applyNodeEdit()">確認修改 ✓</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const input = document.getElementById('node-edit-input');
+  input.focus();
+  input.select();
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') applyNodeEdit();
+    if (e.key === 'Escape') closeNodeEditor();
+  });
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeNodeEditor();
+  });
+}
+
+function extractNodeId(nodeEl) {
+  let id = nodeEl.getAttribute('data-id');
+  if (id) return id;
+
+  const classes = nodeEl.getAttribute('class') || '';
+  const match = classes.match(/node\s+(\w+)/);
+  if (match) return match[1];
+
+  const idEl = nodeEl.querySelector('[id]');
+  if (idEl) {
+    const rawId = idEl.getAttribute('id');
+    const parts = rawId.split('-');
+    if (parts.length >= 2) return parts[parts.length - 1];
+  }
+
+  return null;
+}
+
+function extractNodeText(code, nodeId) {
+  const escapedId = escapeRegex(nodeId);
+  const patterns = [
+    new RegExp(escapedId + '\[(.*?)\]'),
+    new RegExp(escapedId + '\((.*?)\)'),
+    new RegExp(escapedId + '\{(.*?)\}'),
+    new RegExp(escapedId + '\[\/(.*?)\/\]'),
+    new RegExp(escapedId + '\\\[(.*?)\\\]'),
+    new RegExp(escapedId + '\[\((.*?)\)\]'),
+    new RegExp(escapedId + '\(\((.*?)\)\)'),
+    new RegExp(escapedId + '>(.*?)\]'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = code.match(pattern);
+    if (match && match[1] !== undefined) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
+function detectNodeShape(code, nodeId) {
+  const line = code.split('\n').find(l => l.trim().startsWith(nodeId));
+  if (!line) return '未知';
+  const trimmed = line.trim();
+  if (trimmed.includes('[') && trimmed.includes(']')) {
+    if (trimmed.includes('[(') && trimmed.includes(')]')) return '圓柱體 [(text)]';
+    if (trimmed.includes('[/') && trimmed.includes('/]')) return '平行四邊形 [/text/]';
+    if (trimmed.includes('[\\') && trimmed.includes('\\]')) return '平行四邊形 [\\text\\]';
+    return '矩形 [text]';
+  }
+  if (trimmed.includes('{') && trimmed.includes('}')) return '菱形 {text}';
+  if (trimmed.includes('((') && trimmed.includes('))')) return '圓形 ((text))';
+  if (trimmed.includes('(') && trimmed.includes(')')) return '圓角矩形 (text)';
+  if (trimmed.includes('>') && trimmed.includes(']')) return '旗形 >text]';
+  return '未知';
+}
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function applyNodeEdit() {
+  const input = document.getElementById('node-edit-input');
+  if (!input) return;
+  const newText = input.value.trim();
+  if (!newText) {
+    toast('節點文字不能為空', 'error');
+    return;
+  }
+
+  const code = document.getElementById('mermaid-code');
+  let mermaidCode = code.value;
+
+  const oldText = extractNodeText(mermaidCode, editingNodeId);
+  if (oldText === null) {
+    toast('無法定位節點，請在代碼編輯器中手動修改', 'error');
+    closeNodeEditor();
+    return;
+  }
+
+  let newNodeDef = '';
+  const shape = editingNodeShape;
+  if (shape.includes('圓柱體')) newNodeDef = editingNodeId + '[(' + newText + ')]';
+  else if (shape.includes('平行四邊形')) newNodeDef = editingNodeId + '[/' + newText + '/]';
+  else if (shape.includes('矩形')) newNodeDef = editingNodeId + '[' + newText + ']';
+  else if (shape.includes('菱形')) newNodeDef = editingNodeId + '{' + newText + '}';
+  else if (shape.includes('圓形')) newNodeDef = editingNodeId + '((' + newText + '))';
+  else if (shape.includes('圓角矩形')) newNodeDef = editingNodeId + '(' + newText + ')';
+  else if (shape.includes('旗形')) newNodeDef = editingNodeId + '>' + newText + ']';
+  else newNodeDef = editingNodeId + '[' + newText + ']';
+
+  const eId = escapeRegex(editingNodeId);
+  const eText = escapeRegex(oldText);
+  const patterns = [
+    new RegExp(eId + '\[\(' + eText + '\)\]'),
+    new RegExp(eId + '\[\/' + eText + '\/\]'),
+    new RegExp(eId + '\\\[' + eText + '\\\]'),
+    new RegExp(eId + '\[' + eText + '\]'),
+    new RegExp(eId + '\(' + eText + '\)'),
+    new RegExp(eId + '\{' + eText + '\}'),
+    new RegExp(eId + '\(\(' + eText + '\)\)'),
+    new RegExp(eId + '>' + eText + '\]'),
+  ];
+
+  let replaced = false;
+  for (const pattern of patterns) {
+    if (pattern.test(mermaidCode)) {
+      mermaidCode = mermaidCode.replace(pattern, newNodeDef);
+      replaced = true;
+      break;
+    }
+  }
+
+  if (!replaced) {
+    const lines = mermaidCode.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith(editingNodeId)) {
+        const nodePattern = new RegExp('^([ \t]*)' + eId + '([\[\({>].*?[\]\)}\]])');
+        const match = lines[i].match(nodePattern);
+        if (match) {
+          lines[i] = lines[i].replace(nodePattern, '$1' + newNodeDef);
+          replaced = true;
+          break;
+        }
+      }
+    }
+    if (replaced) {
+      mermaidCode = lines.join('\n');
+    }
+  }
+
+  if (!replaced) {
+    toast('無法替換節點文字，請在代碼編輯器中手動修改', 'error');
+    closeNodeEditor();
+    return;
+  }
+
+  code.value = mermaidCode;
+  closeNodeEditor();
+  renderMermaid(mermaidCode);
+  toast('節點已更新 ✓', 'success');
+}
+
+function closeNodeEditor() {
+  const overlay = document.getElementById('node-editor-overlay');
+  if (overlay) overlay.remove();
+  editingNodeId = null;
+  editingNodeShape = null;
+}
+
+// ============================================================
 // PDF
 // ============================================================
 function setupPDFZone() {
-  const zone  = document.getElementById('pdf-zone');
+  const zone = document.getElementById('pdf-zone');
   const input = document.getElementById('pdf-file');
 
-  zone.addEventListener('dragover',  (e) => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', ()  => zone.classList.remove('dragover'));
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
   zone.addEventListener('drop', (e) => {
     e.preventDefault();
     zone.classList.remove('dragover');
@@ -1518,10 +2633,10 @@ function setupPDFZone() {
 
 function setPDFFile(file) {
   pdfFile = file;
-  const zone  = document.getElementById('pdf-zone');
+  const zone = document.getElementById('pdf-zone');
   const label = document.getElementById('pdf-label');
   zone.classList.add('has-file');
-  label.textContent = `✓ ${file.name}  （${(file.size / 1024).toFixed(1)} KB）`;
+  label.textContent = `✓ ${file.name} （${(file.size / 1024).toFixed(1)} KB）`;
 }
 
 function resetPdfZone() {
@@ -1536,17 +2651,24 @@ function resetPdfZone() {
 function switchTab(tab) {
   activeTab = tab;
   document.getElementById('tab-text').classList.toggle('active', tab === 'text');
-  document.getElementById('tab-pdf').classList.toggle('active',  tab === 'pdf');
+  document.getElementById('tab-pdf').classList.toggle('active', tab === 'pdf');
   document.getElementById('text-panel').classList.toggle('hidden', tab !== 'text');
-  document.getElementById('pdf-panel').classList.toggle('hidden',  tab !== 'pdf');
+  document.getElementById('pdf-panel').classList.toggle('hidden', tab !== 'pdf');
 }
 
 // ============================================================
 // ZOOM
 // ============================================================
-function zoomIn()   { setZoom(currentZoom + 0.1); }
-function zoomOut()  { setZoom(currentZoom - 0.1); }
-function resetZoom(){ setZoom(1); }
+function zoomIn() { setZoom(currentZoom + 0.1); }
+function zoomOut() { setZoom(currentZoom - 0.1); }
+function resetZoom() { 
+  currentZoom = 1; 
+  const wrap = document.getElementById('svg-wrap');
+  if (wrap) wrap.style.transform = `scale(${currentZoom})`;
+  // 重置滾動位置
+  const out = document.getElementById('preview-output');
+  if (out) { out.scrollLeft = 0; out.scrollTop = 0; }
+}
 
 function setZoom(z) {
   currentZoom = Math.max(0.3, Math.min(3, z));
@@ -1581,25 +2703,214 @@ function exportSVG() {
 function exportPNG() {
   const svg = document.querySelector('#preview-output svg');
   if (!svg) { toast('尚無流程圖可匯出', 'error'); return; }
-  const scale  = 2.5;
-  const bb     = svg.getBoundingClientRect();
-  const canvas = document.createElement('canvas');
-  canvas.width  = bb.width  * scale;
-  canvas.height = bb.height * scale;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(scale, scale);
-  ctx.fillStyle = '#0c0f1a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const img  = new Image();
-  const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  img.onload = () => {
-    ctx.drawImage(img, 0, 0);
-    dl(canvas.toDataURL('image/png'), exportName() + '.png');
-    URL.revokeObjectURL(url);
-    toast('PNG 已下載', 'success');
-  };
-  img.src = url;
+
+  showLoading('正在生成 PNG...');
+
+  try {
+    // 方法 1: 使用 DOM-to-Image 庫 (最可靠, 但需要引入庫)
+    // 方法 2: 使用 html2canvas (截圖整個預覽區)
+    // 方法 3: 使用原生 Canvas (需要淨化 SVG)
+    // 這裡使用方法 3 的改進版 + 方法 2 作為備選
+
+    const scale = 2.5;
+    let svgWidth, svgHeight;
+
+    const viewBox = svg.getAttribute('viewBox');
+    if (viewBox) {
+      const parts = viewBox.split(/[\s,]+/).map(Number);
+      if (parts.length >= 4 && parts[2] > 0 && parts[3] > 0) {
+        svgWidth = parts[2]; svgHeight = parts[3];
+      }
+    }
+    if (!svgWidth || !svgHeight) {
+      const wAttr = svg.getAttribute('width');
+      const hAttr = svg.getAttribute('height');
+      if (wAttr && hAttr) { svgWidth = parseFloat(wAttr); svgHeight = parseFloat(hAttr); }
+    }
+    if (!svgWidth || !svgHeight || svgWidth <= 0 || svgHeight <= 0) {
+      try { const bbox = svg.getBBox(); svgWidth = bbox.width; svgHeight = bbox.height; } catch (e) {}
+    }
+    if (!svgWidth || !svgHeight || svgWidth <= 0 || svgHeight <= 0) {
+      const bb = svg.getBoundingClientRect();
+      svgWidth = bb.width; svgHeight = bb.height;
+    }
+    svgWidth = Math.max(svgWidth || 800, 100);
+    svgHeight = Math.max(svgHeight || 600, 100);
+
+    let bgColor;
+    if (currentTheme === 'dark') bgColor = '#0c0f1a';
+    else if (currentTheme === 'bw' || currentTheme === 'blackwhite') bgColor = '#ffffff';
+    else bgColor = '#f8fafc';
+
+    // 核心修復: 淨化 SVG, 移除外部字體與 CSS 變數引用
+    const sanitizedSvg = sanitizeSVGForExport(svg, bgColor);
+
+    const img = new Image();
+
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(svgWidth * scale);
+        canvas.height = Math.ceil(svgHeight * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const pngUrl = canvas.toDataURL('image/png');
+        dl(pngUrl, exportName() + '.png');
+        toast('PNG 已下載 ✓', 'success');
+      } catch (err) {
+        console.error('Canvas error:', err);
+        // 方法 2 備選: 嘗試截圖
+        toast('Canvas 失敗, 嘗試替代方案...', 'info');
+        exportPNGByScreenshot(scale, bgColor);
+      } finally { hideLoading(); }
+    };
+
+    img.onerror = () => {
+      toast('圖片載入失敗, 嘗試替代方案...', 'error');
+      exportPNGByScreenshot(scale, bgColor);
+    };
+
+    // 使用 data URI
+    const svgBase64 = btoa(unescape(encodeURIComponent(sanitizedSvg)));
+    img.src = 'data:image/svg+xml;base64,' + svgBase64;
+
+    setTimeout(() => { hideLoading(); }, 12000);
+
+  } catch (e) {
+    console.error('exportPNG error:', e);
+    toast('PNG 導出失敗：' + e.message, 'error');
+    hideLoading();
+  }
+}
+
+// 替代方案: 使用 DOM 截圖 (不依賴 SVG 載入)
+async function exportPNGByScreenshot(scale, bgColor) {
+  try {
+    const wrap = document.getElementById('svg-wrap');
+    if (!wrap) {
+      toast('無法找到流程圖元素', 'error');
+      hideLoading();
+      return;
+    }
+
+    // 使用現代瀏覽器的 captureViewport/captureElement (如果可用)
+    // 或者使用 html-to-image 庫
+    // 這裡使用一個簡單的替代: 直接下載 SVG
+    toast('PNG 生成受限, 改為下載高清 SVG', 'info');
+    const svg = document.querySelector('#preview-output svg');
+    if (svg) {
+      const sanitized = sanitizeSVGForExport(svg, bgColor);
+      downloadSVG(sanitized);
+    }
+  } catch (e) {
+    toast('替代方案也失敗：' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+// 淨化 SVG: 移除外部字體引用, 內聯樣式, 確保 Canvas 不被污染
+function sanitizeSVGForExport(svgEl, bgColor) {
+  const clone = svgEl.cloneNode(true);
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // 設置基本屬性
+  clone.setAttribute('xmlns', NS);
+  clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+
+  // 獲取 viewBox 或計算尺寸
+  let vb = clone.getAttribute('viewBox');
+  if (!vb) {
+    const w = clone.getAttribute('width') || '800';
+    const h = clone.getAttribute('height') || '600';
+    clone.setAttribute('viewBox', '0 0 ' + parseFloat(w) + ' ' + parseFloat(h));
+  }
+  clone.setAttribute('width', '100%');
+  clone.setAttribute('height', '100%');
+
+  // 移除所有 style 標籤中的外部字體引用
+  const styles = clone.querySelectorAll('style');
+  styles.forEach(style => {
+    let css = style.textContent || '';
+    // 移除 @import, @font-face, Google Fonts 引用
+    css = css.replace(/@import[^;]*;/gi, '');
+    css = css.replace(/@font-face\s*\{[^}]*\}/gi, '');
+    css = css.replace(/font-family:\s*['"]?DM Sans['"]?[^;]*;/gi, "font-family: 'Arial', 'Helvetica', sans-serif;");
+    css = css.replace(/font-family:\s*var\(--font\)[^;]*;/gi, "font-family: 'Arial', 'Helvetica', sans-serif;");
+    css = css.replace(/font-family:\s*var\(--mono\)[^;]*;/gi, "font-family: 'Courier New', monospace;");
+    style.textContent = css;
+  });
+
+  // 移除 drop-shadow filters (部分瀏覽器會因此污染 Canvas)
+  styles.forEach(style => {
+    let css = style.textContent || '';
+    css = css.replace(/filter:\s*drop-shadow[^;]*;/gi, '');
+    style.textContent = css;
+  });
+
+  // 將 <foreignObject> 轉換為 SVG <text>，避免 Canvas 污染
+  const foreignObjects = clone.querySelectorAll('foreignObject');
+  foreignObjects.forEach(fo => {
+    const textEl = fo.querySelector('div, span, p');
+    const content = textEl ? textEl.textContent.trim() : fo.textContent.trim();
+    if (!content) { fo.remove(); return; }
+    const svgText = document.createElementNS(NS, 'text');
+    const x = parseFloat(fo.getAttribute('x') || 0) + parseFloat(fo.getAttribute('width') || 0) / 2;
+    const y = parseFloat(fo.getAttribute('y') || 0) + parseFloat(fo.getAttribute('height') || 0) / 2 + 5;
+    svgText.setAttribute('x', x);
+    svgText.setAttribute('y', y);
+    svgText.setAttribute('text-anchor', 'middle');
+    svgText.setAttribute('dominant-baseline', 'middle');
+    svgText.setAttribute('font-family', 'Arial, Helvetica, sans-serif');
+    svgText.setAttribute('font-size', '12');
+    svgText.setAttribute('fill', bgColor === '#0c0f1a' ? '#e8f0fe' : bgColor === '#ffffff' ? '#000000' : '#333333');
+    svgText.textContent = content;
+    fo.parentNode.replaceChild(svgText, fo);
+  });
+
+  // 遞歸處理所有元素: 替換字體, 移除 CSS 變數
+  function walk(node) {
+    if (node.nodeType !== 1) return;
+    // 處理 style 屬性中的字體
+    if (node.getAttribute('style')) {
+      let s = node.getAttribute('style');
+      s = s.replace(/font-family:\s*['"]?DM Sans['"]?[^;]*/gi, "font-family: 'Arial', 'Helvetica', sans-serif");
+      s = s.replace(/font-family:\s*['"]?JetBrains Mono['"]?[^;]*/gi, "font-family: 'Courier New', monospace");
+      s = s.replace(/filter:\s*drop-shadow[^;]*/gi, '');
+      node.setAttribute('style', s);
+    }
+    Array.from(node.children).forEach(walk);
+  }
+  walk(clone);
+
+  // 添加背景色矩形 (確保 PNG 有正確背景)
+  const rect = document.createElementNS(NS, 'rect');
+  rect.setAttribute('width', '100%');
+  rect.setAttribute('height', '100%');
+  rect.setAttribute('fill', bgColor);
+  rect.setAttribute('x', '0');
+  rect.setAttribute('y', '0');
+  // 插入到最底層
+  if (clone.firstChild) {
+    clone.insertBefore(rect, clone.firstChild);
+  } else {
+    clone.appendChild(rect);
+  }
+
+  return new XMLSerializer().serializeToString(clone);
+}
+
+function downloadSVG(svgString) {
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  dl(url, exportName() + '.svg');
+  toast('已下載 SVG 格式 ✓', 'info');
+}
+
+function fallbackSvgToPng(svgData, svgWidth, svgHeight, scale, bgColor) {
+  downloadSVG(svgData);
 }
 
 function exportName() {
@@ -1615,12 +2926,10 @@ function dl(url, name) {
 // ============================================================
 // THEME
 // ============================================================
-let currentTheme = 'dark';
-
 function getMermaidConfig(theme) {
   const base = {
     startOnLoad: false,
-    flowchart: { htmlLabels: true, curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 70 },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 70, subgraphMargin: 20, useMaxWidth: true },
     securityLevel: 'loose',
   };
   if (theme === 'dark') {
@@ -1629,7 +2938,16 @@ function getMermaidConfig(theme) {
       lineColor: '#60a5fa', secondaryColor: '#0d2137', tertiaryColor: '#0c1a2e',
       edgeLabelBackground: '#162033', clusterBkg: '#0f1e30', clusterBorder: '#2563eb',
       titleColor: '#bfdbfe', nodeTextColor: '#e8f0fe',
-      fontFamily: 'DM Sans, sans-serif', fontSize: '14px',
+      fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '14px',
+    }};
+  }
+  if (theme === 'bw' || theme === 'blackwhite') {
+    return { ...base, theme: 'base', themeVariables: {
+      primaryColor: '#ffffff', primaryTextColor: '#000000', primaryBorderColor: '#000000',
+      lineColor: '#000000', secondaryColor: '#f5f5f5', tertiaryColor: '#eeeeee',
+      edgeLabelBackground: '#ffffff', clusterBkg: '#fafafa', clusterBorder: '#333333',
+      titleColor: '#000000', nodeTextColor: '#000000',
+      fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '14px',
     }};
   }
   return { ...base, theme };
@@ -1639,7 +2957,13 @@ function setTheme(theme) {
   currentTheme = theme;
   mermaid.initialize(getMermaidConfig(theme));
   const preview = document.getElementById('preview-output');
-  preview.style.background = theme === 'dark' ? '' : '#f8fafc';
+  if (theme === 'dark') {
+    preview.style.background = '';
+  } else if (theme === 'bw' || theme === 'blackwhite') {
+    preview.style.background = '#ffffff';
+  } else {
+    preview.style.background = '#f8fafc';
+  }
   const code = document.getElementById('mermaid-code').value;
   if (code.trim()) renderMermaid(code);
 }
@@ -1676,34 +3000,199 @@ function loadFromURL() {
 const TEMPLATES = [
   {
     name: '採購審批流程', icon: '📋', type: 'Flowchart',
-    code: `flowchart TD
-  classDef startEnd fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5,font-weight:600
-  classDef process  fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe
-  classDef decision fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7,font-weight:600
-  classDef docNode  fill:#3b0764,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff
+    code: `flowchart LR
+  subgraph 申請部門["📝 申請部門"]
+    direction TB
+    S([開始])
+    B1[填寫採購申請表]
+    D1[/採購申請表/]
+    G1{金額超過5萬？}
+  end
+  subgraph 部門主管["👔 部門主管"]
+    direction TB
+    A1[部門主管審批]
+    G2{主管批准？}
+    R1[退回並說明原因]
+  end
+  subgraph 管理層["🏢 管理層"]
+    direction TB
+    A2[CFO審批]
+    G4{CFO批准？}
+  end
+  subgraph 財務部["💰 財務部"]
+    direction TB
+    F1[財務部收件]
+    F2[安排付款]
+    F3[完成記帳]
+    E([結束])
+  end
 
-  S([開始]) --> B1[填寫採購申請表]
-  B1 --> D1[/採購申請表/]
-  D1 --> G1{金額超過5萬？}
-  G1 -- 否 --> A1[部門主管審批]
+  S --> B1
+  B1 --> D1
+  D1 --> G1
+  G1 -- 否 --> A1
   G1 -- 是 --> A1
-  A1 --> G2{主管批准？}
-  G2 -- 否 --> R1[退回並說明原因]
-  R1 --> B1
+  A1 --> G2
+  G2 -- 否 --> R1
+  R1 -.-> B1
   G2 -- 是 --> G3{金額超過5萬？}
-  G3 -- 否 --> F1[財務部收件]
-  G3 -- 是 --> A2[CFO審批]
-  A2 --> G4{CFO批准？}
-  G4 -- 否 --> R1
+  G3 -- 否 --> F1
+  G3 -- 是 --> A2
+  A2 --> G4
+  G4 -- 否 -.-> R1
   G4 -- 是 --> F1
-  F1 --> F2[安排付款]
-  F2 --> F3[完成記帳]
-  F3 --> E([結束])
+  F1 --> F2
+  F2 --> F3
+  F3 --> E
+
+  classDef startEnd fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5,font-weight:600
+  classDef process fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe
+  classDef decision fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7,font-weight:600
+  classDef docNode fill:#3b0764,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff
 
   class S,E startEnd
-  class B1,A1,A2,F1,F2,F3 process
+  class B1,A1,A2,F1,F2,F3,R1 process
   class G1,G2,G3,G4 decision
   class D1 docNode`
+  },
+  {
+    name: '內部審計流程', icon: '🔍', type: 'Flowchart',
+    code: `flowchart TD
+  classDef startEnd fill:#1a365d,stroke:#63b3ed,stroke-width:2px,color:#bee3f8,font-weight:600
+  classDef process  fill:#2d3748,stroke:#a0aec0,stroke-width:1.5px,color:#e2e8f0
+  classDef decision fill:#744210,stroke:#f6ad55,stroke-width:2px,color:#fefcbf,font-weight:600
+  classDef docNode  fill:#553c9a,stroke:#b794f4,stroke-width:1.5px,color:#e9d8fd
+  classDef kcpNode  fill:#065f46,stroke:#34d399,stroke-width:2pxpx,color:#d1fae5
+
+  S([開始]) --> P1[制定審計計劃]
+  P1 --> D1[/審計計劃書/]
+  D1 --> P2[風險評估]
+  P2 --> G1{風險等級？}
+  G1 -- 高 --> P3[詳細測試]
+  G1 -- 中 --> P4[抽樣測試]
+  G1 -- 低 --> P5[分析性覆核]
+  P3 --> P6[收集審計證據]
+  P4 --> P6
+  P5 --> P6
+  P6 --> G2{證據充分？}
+  G2 -- 否 --> P6
+  G2 -- 是 --> P7[編制審計報告]
+  P7 --> D2[/審計報告草稿/]
+  D2 --> P8[管理層回應]
+  P8 --> G3{接受建議？}
+  G3 -- 否 --> P9[協商修正]
+  P9 --> P8
+  G3 -- 是 --> P10[發出最終報告]
+  P10 --> E([結束])
+
+  class S,E startEnd
+  class P1,P2,P3,P4,P5,P6,P7,P8,P9,P10 process
+  class G1,G2,G3 decision
+  class D1,D2 docNode`
+  },
+  {
+    name: '費用報銷流程', icon: '💰', type: 'Flowchart',
+    code: `flowchart LR
+  classDef startEnd fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5,font-weight:600
+  classDef process fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe
+  classDef decision fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7,font-weight:600
+  classDef docNode fill:#3b0764,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff
+
+  subgraph 員工["👤 員工"]
+    direction TB
+    S([開始])
+    B1[填寫報銷單]
+    D1[/發票及單據/]
+  end
+  subgraph 部門主管["👔 部門主管"]
+    direction TB
+    A1{金額<5000？}
+    A2[部門主管審批]
+    A3[部門主管+總監審批]
+  end
+  subgraph 財務部["💰 財務部"]
+    direction TB
+    F1[財務審核]
+    G1{單據齊全？}
+    R1[退回補件]
+    F2[安排付款]
+  end
+  subgraph 結束["✅ 結束"]
+    direction TB
+    F3[記帳存檔]
+    E([結束])
+  end
+
+  S --> B1
+  B1 --> D1
+  D1 --> A1
+  A1 -- 是 --> A2
+  A1 -- 否 --> A3
+  A2 --> F1
+  A3 --> F1
+  F1 --> G1
+  G1 -- 否 --> R1
+  R1 --> B1
+  G1 -- 是 --> F2
+  F2 --> F3
+  F3 --> E
+
+  class S,E startEnd
+  class B1,F1,F2,F3,A2,A3,R1 process
+  class A1,G1 decision
+  class D1 docNode`
+  },
+  {
+    name: '招聘面試流程 (泳道)', icon: '🏊', type: 'Flowchart',
+    code: `flowchart LR
+  classDef startEnd fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5,font-weight:600
+  classDef process fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe
+  classDef decision fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7,font-weight:600
+
+  subgraph 招聘專員["👤 招聘專員"]
+    direction TB
+    A[篩選簡歷]
+    B[通過初篩簡歷]
+    C[與候選人預約面試時間]
+    D[與面試官確認面試時間]
+  end
+  subgraph 業務主管["👔 業務主管"]
+    direction TB
+    E[篩選簡歷]
+    F[需要約定面試履歷]
+    G[面試]
+    H{是否通過}
+  end
+  subgraph 人力資源主管["💼 人力資源主管"]
+    direction TB
+    I[人資面試]
+    J{是否通過}
+    K[談薪資及相關制度]
+    L{是否達成共識}
+    M([通知入職])
+    N([回覆候選人])
+  end
+
+  A --> B
+  B --> C
+  C --> D
+  E --> F
+  F --> G
+  G --> H
+  I --> J
+  J --> K
+  K --> L
+  L --> M
+  B --> E
+  D --> G
+  H -- 通過 --> I
+  H -- 未通過 --> N
+  J -- 通過 --> K
+  L -- 否 --> N
+
+  class M,N startEnd
+  class A,B,C,D,E,F,G,I,K process
+  class H,J,L decision`
   },
   {
     name: 'API 調用序列', icon: '🔄', type: 'Sequence',
@@ -1820,6 +3309,40 @@ const TEMPLATES = [
         月費方案
         年費優惠`
   },
+  {
+    name: '黑白泳道流程圖', icon: '⬛', type: 'Flowchart',
+    code: `flowchart LR
+  %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'edgeLabelBackground': '#ffffff', 'clusterBkg': '#fafafa', 'clusterBorder': '#333333'}}}%%
+
+  classDef startEnd fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600
+  classDef process fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000
+  classDef decision fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600
+  classDef docNode fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000
+
+  subgraph 部門A["🏢 部門A"]
+    direction TB
+    A([開始])
+    B[步驟一]
+    C{判定？}
+  end
+  subgraph 部門B["🏢 部門B"]
+    direction TB
+    D[步驟二]
+    E[步驟三]
+    F([結束])
+  end
+
+  A --> B
+  B --> C
+  C -- 是 --> D
+  C -- 否 --> G([結束])
+  D --> E
+  E --> F
+
+  class A,F,G startEnd
+  class B,D,E process
+  class C decision`
+  },
 ];
 
 let activeTplIdx = -1;
@@ -1840,21 +3363,17 @@ function showTemplates() {
   document.getElementById('tpl-preview-label').textContent = '尚未選擇範本';
   document.getElementById('tpl-load-btn').disabled = true;
   document.getElementById('tpl-modal').classList.remove('hidden');
-  // Auto-select first template
   previewTemplate(0);
 }
 
 async function previewTemplate(idx) {
   activeTplIdx = idx;
   const t = TEMPLATES[idx];
-  // Highlight active card
   document.querySelectorAll('.tpl-card').forEach(c => c.classList.remove('active'));
   document.getElementById(`tpl-card-${idx}`)?.classList.add('active');
-  // Update code preview
   document.getElementById('tpl-preview-code').textContent = t.code;
   document.getElementById('tpl-preview-label').textContent = `${t.icon} ${t.name} — ${t.type}`;
   document.getElementById('tpl-load-btn').disabled = false;
-  // Render SVG preview
   const svgBox = document.getElementById('tpl-preview-svg');
   svgBox.innerHTML = '<div style="color:var(--text-dim);font-size:12px;">渲染中…</div>';
   try {
@@ -1863,7 +3382,7 @@ async function previewTemplate(idx) {
     svgBox.innerHTML = `<div style="max-width:100%;overflow:auto;">${svg}</div>`;
     const svgEl = svgBox.querySelector('svg');
     if (svgEl) {
-      svgEl.style.maxWidth = '100%';
+      svgEl.style.maxWidth = 'none';  // 允許 SVG 超出容器以顯示完整泳道
       svgEl.style.height = 'auto';
       if (currentTheme === 'dark') enhanceMermaidSVG(svgEl);
       else enhanceMermaidSVGLight(svgEl);
@@ -1890,19 +3409,19 @@ function confirmLoadTemplate() {
 }
 
 // ============================================================
-// SPLITTER (resize panels)
+// SPLITTER
 // ============================================================
 function setupSplitter() {
-  const sp  = document.getElementById('splitter');
-  const ws  = document.getElementById('workspace');
-  const cp  = document.getElementById('code-panel');
-  const pp  = document.getElementById('preview-panel');
+  const sp = document.getElementById('splitter');
+  const ws = document.getElementById('workspace');
+  const cp = document.getElementById('code-panel');
+  const pp = document.getElementById('preview-panel');
   let dragging = false, startX = 0, startW = 0;
 
   sp.addEventListener('mousedown', (e) => {
     dragging = true;
-    startX   = e.clientX;
-    startW   = cp.getBoundingClientRect().width;
+    startX = e.clientX;
+    startW = cp.getBoundingClientRect().width;
     sp.classList.add('dragging');
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
@@ -1910,11 +3429,11 @@ function setupSplitter() {
 
   document.addEventListener('mousemove', (e) => {
     if (!dragging) return;
-    const total = ws.getBoundingClientRect().width - 4; // minus splitter
-    const newW  = Math.max(200, Math.min(total - 200, startW + (e.clientX - startX)));
+    const total = ws.getBoundingClientRect().width - 4;
+    const newW = Math.max(200, Math.min(total - 200, startW + (e.clientX - startX)));
     cp.style.flex = 'none';
     cp.style.width = newW + 'px';
-    pp.style.flex  = '1';
+    pp.style.flex = '1';
   });
 
   document.addEventListener('mouseup', () => {
@@ -1941,14 +3460,14 @@ function hideLoading() {
 function toast(msg, type = 'info') {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className   = `visible ${type}`;
+  el.className = `visible ${type}`;
   clearTimeout(el._t);
   el._t = setTimeout(() => { el.className = ''; }, 2800);
 }
 
 function setStatus(text, busy = false) {
   document.getElementById('status-text').textContent = text;
-  document.getElementById('status-dot').className    = busy ? 'indicator busy' : 'indicator';
+  document.getElementById('status-dot').className = busy ? 'indicator busy' : 'indicator';
 }
 
 function updateRecordCount() {
@@ -1980,7 +3499,7 @@ function escHtml(s) {
 function toBase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.onload  = () => resolve(r.result.split(',')[1]);
+    r.onload = () => resolve(r.result.split(',')[1]);
     r.onerror = reject;
     r.readAsDataURL(file);
   });
@@ -1992,7 +3511,7 @@ function toBase64(file) {
   <div class="modal tpl-modal" style="position:relative;">
     <button class="tpl-modal-close" onclick="closeTpl()">✕</button>
     <div class="tpl-modal-header">
-      <div class="modal-logo">Flowchart Generator</div>
+      <div class="modal-logo">Flowchart Generator Pro</div>
       <div class="modal-title" style="font-size:18px;margin-bottom:2px;">圖表範本 📋</div>
       <div style="font-size:12px;color:var(--text-dim);">選擇範本預覽，點擊「載入至編輯器」後可自由修改</div>
     </div>
