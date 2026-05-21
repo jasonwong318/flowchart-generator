@@ -585,12 +585,15 @@ body {
   background: rgba(248,113,113,0.08);
   border: 1px solid var(--red);
   color: var(--red);
-  padding: 14px 18px;
+  padding: 10px 14px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   font-family: var(--mono);
-  max-width: 420px;
-  line-height: 1.6;
+  max-width: 520px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* ===== STATUS BAR ===== */
@@ -1123,7 +1126,8 @@ body {
           <span class="config-label">🏊 泳道</span>
           <select class="config-select" id="swimlane-select">
             <option value="auto">🤖 AI 自動偵測</option>
-            <option value="force">✅ 強制啟用 (PlantUML)</option>
+            <option value="force">🏊 泳道圖 (PlantUML)</option>
+            <option value="plantuml-all">⭐ 全部用 PlantUML</option>
             <option value="none">❌ 不啟用</option>
           </select>
         </div>
@@ -1175,7 +1179,7 @@ body {
         </div>
       </div>
       <div id="swimlane-notice" style="margin-top:8px; padding:8px 12px; background:var(--accent-dim); border:1px solid var(--border); border-radius:6px; font-size:11.5px; color:var(--text2); line-height:1.6; display:none;">
-        <strong style="color:var(--cyan)">💡 泳道圖提示</strong>：選擇「強制啟用 (PlantUML)」會使用 <strong>PlantUML 活動圖</strong>（透過 Kroki.io 渲染），產生帶有垂直分隔線的真正泳道圖。選擇「AI 自動偵測」則使用 Mermaid subgraph 模擬泳道（效果較弱）。
+        <strong style="color:var(--cyan)">💡 PlantUML 模式</strong>：此模式透過 Kroki.io 渲染，產生專業品質的流程圖。「泳道圖」強制使用欄位分隔的泳道格式；「全部用 PlantUML」讓 AI 按需決定是否加泳道。需要網路連線。
       </div>
     </div>
 
@@ -1269,7 +1273,7 @@ function setupConfigBarListeners() {
       const swimlane = document.getElementById('swimlane-select').value;
       const notice = document.getElementById('swimlane-notice');
       if (notice) {
-        notice.style.display = (swimlane === 'force' || swimlane === 'auto') ? 'block' : 'none';
+        notice.style.display = (swimlane === 'force' || swimlane === 'plantuml-all') ? 'block' : 'none';
       }
       const code = document.getElementById('mermaid-code').value;
       if (code.trim()) renderMermaid(code);
@@ -1592,19 +1596,19 @@ function getUserSettings() {
   };
 }
 
-function buildPlantUMLSwimlanePrompt() {
-  return `你是資深業務流程分析師，請將業務流程轉換為 PlantUML 活動圖（泳道格式）。
-
-【輸出規則 — 必須嚴格遵守】
-1. 只輸出純 PlantUML 代碼，第一行必須是 @startuml，最後一行必須是 @enduml
-2. 不要有任何說明文字、markdown 代碼塊符號（不要 \`\`\`）
-3. 所有節點文字、條件標籤、泳道名稱必須使用繁體中文
-4. 必須使用泳道（swimlane）格式，每個部門/角色用 |部門名稱| 標示
-5. 使用活動圖語法（:活動文字;）而非序列圖語法
-
-【PlantUML 泳道語法範例】
-@startuml
-skinparam swimlaneWidth 200
+function buildPlantUMLSwimlanePrompt(proTheme, requireSwimlane = true) {
+  const isBlackWhite = proTheme === 'blackwhite';
+  const skinparams = isBlackWhite ? `skinparam swimlaneWidth 220
+skinparam backgroundColor #ffffff
+skinparam swimlaneBorderColor #000000
+skinparam swimlaneTitleFontColor #000000
+skinparam activityBackgroundColor #ffffff
+skinparam activityBorderColor #000000
+skinparam activityFontColor #000000
+skinparam arrowColor #000000
+skinparam activityDiamondBackgroundColor #ffffff
+skinparam activityDiamondBorderColor #000000
+skinparam activityDiamondFontColor #000000` : `skinparam swimlaneWidth 220
 skinparam backgroundColor #0c0f1a
 skinparam swimlaneBorderColor #263050
 skinparam swimlaneTitleFontColor #dce7f7
@@ -1614,7 +1618,23 @@ skinparam activityFontColor #e8f0fe
 skinparam arrowColor #60a5fa
 skinparam activityDiamondBackgroundColor #78350f
 skinparam activityDiamondBorderColor #fbbf24
-skinparam activityDiamondFontColor #fef3c7
+skinparam activityDiamondFontColor #fef3c7`;
+  const swimlaneRule = requireSwimlane
+    ? '4. 必須使用泳道（swimlane）格式，每個部門/角色用 |部門名稱| 標示'
+    : '4. 根據流程複雜度決定是否使用泳道。如流程涉及多個部門，使用 |部門名稱| 劃分泳道；否則直接輸出線性活動圖';
+
+  return `你是資深業務流程分析師，請將業務流程轉換為 PlantUML 活動圖。
+
+【輸出規則 — 必須嚴格遵守】
+1. 只輸出純 PlantUML 代碼，第一行必須是 @startuml，最後一行必須是 @enduml
+2. 不要有任何說明文字、markdown 代碼塊符號（不要 \`\`\`）
+3. 所有節點文字、條件標籤、泳道名稱必須使用繁體中文
+${swimlaneRule}
+5. 使用活動圖語法（:活動文字;）而非序列圖語法
+
+【PlantUML 泳道語法範例】
+@startuml
+${skinparams}
 
 |申請人|
 start
@@ -1921,8 +1941,9 @@ async function callAI({ text, pdf }) {
   showLoading('AI 正在分析業務流程...');
 
   const settings = getUserSettings();
-  const usePlantUML = settings.swimlane === 'force';
-  const systemPrompt = usePlantUML ? buildPlantUMLSwimlanePrompt() : buildSystemPrompt(settings);
+  const usePlantUML = settings.swimlane === 'force' || settings.swimlane === 'plantuml-all';
+  const plantUMLSwimlane = settings.swimlane === 'force';
+  const systemPrompt = usePlantUML ? buildPlantUMLSwimlanePrompt(settings.proTheme, plantUMLSwimlane) : buildSystemPrompt(settings);
 
   try {
     let result;
@@ -2249,7 +2270,7 @@ async function renderPlantUML(code) {
       out.style.alignItems = 'flex-start';
     }
   } catch(e) {
-    out.innerHTML = `<div class="error-box">⚠ PlantUML 渲染錯誤<br><br>${escHtml(String(e.message || e))}</div>`;
+    out.innerHTML = `<div class="error-box">⚠ PlantUML 渲染錯誤<small style="opacity:0.7;font-size:11px;">${escHtml(String(e.message || e))}</small></div>`;
   }
 }
 
@@ -2298,7 +2319,8 @@ async function renderMermaid(code) {
       setupNodeEditing(svgEl);
     }
   } catch(e) {
-    out.innerHTML = `<div class="error-box">⚠ Mermaid 語法錯誤<br><br>${escHtml(String(e.message || e))}</div>`;
+    const msg = String(e.message || e).split('\n')[0];
+    out.innerHTML = `<div class="error-box">⚠ Mermaid 語法錯誤<br><small style="opacity:0.7;font-size:11px;word-break:break-all;">${escHtml(msg)}</small></div>`;
   }
 }
 
@@ -2820,7 +2842,7 @@ function exportPNG() {
     // 方法 3: 使用原生 Canvas (需要淨化 SVG)
     // 這裡使用方法 3 的改進版 + 方法 2 作為備選
 
-    const scale = 2.5;
+    const scale = 4;
     let svgWidth, svgHeight;
 
     const viewBox = svg.getAttribute('viewBox');
