@@ -1123,7 +1123,7 @@ body {
           <span class="config-label">🏊 泳道</span>
           <select class="config-select" id="swimlane-select">
             <option value="auto">🤖 AI 自動偵測</option>
-            <option value="force">✅ 強制啟用</option>
+            <option value="force">✅ 強制啟用 (PlantUML)</option>
             <option value="none">❌ 不啟用</option>
           </select>
         </div>
@@ -1171,11 +1171,11 @@ body {
         </button>
         <div class="action-hint">
           <span class="dot-live"></span>
-          <span id="ai-status">Gemini 2.5 Flash-Lite · 智能偵測泳道</span>
+          <span id="ai-status">Gemini 3.5 Flash · 智能偵測泳道</span>
         </div>
       </div>
       <div id="swimlane-notice" style="margin-top:8px; padding:8px 12px; background:var(--accent-dim); border:1px solid var(--border); border-radius:6px; font-size:11.5px; color:var(--text2); line-height:1.6; display:none;">
-        <strong style="color:var(--amber)">⚠ 泳道圖提示</strong>：Mermaid.js 目前不支援真正的泳道（Swimlane）功能。生成的「泳道」實際上是從左到右排列的 subgraph 區塊，無法繪製垂直分隔線。如需標準泳道圖，建議使用 Visio、ProcessOn 或 Draw.io。
+        <strong style="color:var(--cyan)">💡 泳道圖提示</strong>：選擇「強制啟用 (PlantUML)」會使用 <strong>PlantUML 活動圖</strong>（透過 Kroki.io 渲染），產生帶有垂直分隔線的真正泳道圖。選擇「AI 自動偵測」則使用 Mermaid subgraph 模擬泳道（效果較弱）。
       </div>
     </div>
 
@@ -1359,7 +1359,7 @@ function setAIModel(model) {
     document.getElementById(`model-${m}`).classList.toggle('active', m === model);
   });
   const statusMap = {
-    gemini: 'Gemini 2.5 Flash-Lite · 智能偵測泳道',
+    gemini: 'Gemini 3.5 Flash · 智能偵測泳道',
     deepseek: 'DeepSeek V3 · 邏輯推理強',
     kimi: 'Kimi K2.6 · 長文本處理',
     doubao: '豆包 Pro · 中文理解佳',
@@ -1592,9 +1592,65 @@ function getUserSettings() {
   };
 }
 
+function buildPlantUMLSwimlanePrompt() {
+  return `你是資深業務流程分析師，請將業務流程轉換為 PlantUML 活動圖（泳道格式）。
+
+【輸出規則 — 必須嚴格遵守】
+1. 只輸出純 PlantUML 代碼，第一行必須是 @startuml，最後一行必須是 @enduml
+2. 不要有任何說明文字、markdown 代碼塊符號（不要 \`\`\`）
+3. 所有節點文字、條件標籤、泳道名稱必須使用繁體中文
+4. 必須使用泳道（swimlane）格式，每個部門/角色用 |部門名稱| 標示
+5. 使用活動圖語法（:活動文字;）而非序列圖語法
+
+【PlantUML 泳道語法範例】
+@startuml
+skinparam swimlaneWidth 200
+skinparam backgroundColor #0c0f1a
+skinparam swimlaneBorderColor #263050
+skinparam swimlaneTitleFontColor #dce7f7
+skinparam activityBackgroundColor #1e3a5f
+skinparam activityBorderColor #60a5fa
+skinparam activityFontColor #e8f0fe
+skinparam arrowColor #60a5fa
+skinparam activityDiamondBackgroundColor #78350f
+skinparam activityDiamondBorderColor #fbbf24
+skinparam activityDiamondFontColor #fef3c7
+
+|申請人|
+start
+:填寫採購申請表;
+:準備相關單據;
+
+|部門主管|
+:審核申請;
+if (金額超過5萬？) then (是)
+  |CFO|
+  :CFO 審批;
+  if (批准？) then (否)
+    |申請人|
+    :修改並重新提交;
+    stop
+  endif
+else (否)
+endif
+
+|財務部|
+:收件並核對單據;
+:安排付款;
+:完成記帳存檔;
+stop
+@enduml
+
+【注意事項】
+- |泳道名稱| 格式定義泳道，後續活動歸屬此泳道直至下一個 |泳道名稱|
+- 判定用 if/then/else/endif 語法
+- 並行用 fork/fork again/end fork
+- 確保代碼語法正確、完整可運行`;
+}
+
 function buildSystemPrompt(settings) {
   const direction = settings.direction === 'auto' ? 'LR（泳道圖必須使用 LR 方向，subgraph 從左到右排列成泳道）' : settings.direction;
-  const swimlane = settings.swimlane === 'auto' ? '涉及2個或以上部門/角色時自動使用 subgraph 劃分泳道' : 
+  const swimlane = settings.swimlane === 'auto' ? '涉及2個或以上部門/角色時自動使用 subgraph 劃分泳道' :
                    settings.swimlane === 'force' ? '強制使用 subgraph 劃分泳道，即使只有一個部門也建立泳道' : '不使用泳道';
 
   const themeColors = {
@@ -1865,7 +1921,8 @@ async function callAI({ text, pdf }) {
   showLoading('AI 正在分析業務流程...');
 
   const settings = getUserSettings();
-  const systemPrompt = buildSystemPrompt(settings);
+  const usePlantUML = settings.swimlane === 'force';
+  const systemPrompt = usePlantUML ? buildPlantUMLSwimlanePrompt() : buildSystemPrompt(settings);
 
   try {
     let result;
@@ -1877,7 +1934,8 @@ async function callAI({ text, pdf }) {
       default: result = await callGemini(systemPrompt, text, pdf);
     }
 
-    const code = cleanMermaid(result.text);
+    const raw = result.text;
+    const code = usePlantUML ? cleanPlantUML(raw) : cleanMermaid(raw);
     const modelUsed = result.model;
 
     document.getElementById('mermaid-code').value = code;
@@ -1911,7 +1969,7 @@ async function callGemini(systemPrompt, text, pdf) {
         { text: systemPrompt + '\n\n【業務流程描述】\n' + text },
       ];
 
-  const models = ['gemini-2.5-flash-lite', 'gemini-1.5-flash'];
+  const models = ['gemini-3.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash'];
   let lastErr;
   for (const model of models) {
     try {
@@ -2130,6 +2188,22 @@ function cleanMermaid(raw) {
   return s;
 }
 
+function cleanPlantUML(raw) {
+  let s = raw.trim();
+  // Extract from fenced code block if present
+  const fenced = s.match(/```(?:plantuml)?\s*\n?([\s\S]*?)```/i);
+  if (fenced) s = fenced[1].trim();
+  else {
+    s = s.replace(/^```(?:plantuml)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  }
+  // Ensure it starts with @startuml
+  const idx = s.indexOf('@startuml');
+  if (idx > 0) s = s.slice(idx).trim();
+  // Ensure it ends with @enduml
+  if (!s.includes('@enduml')) s = s + '\n@enduml';
+  return s;
+}
+
 function autoTitle(code, inputText) {
   const sg = code.match(/subgraph\s+([^\n{[]+)/);
   if (sg) {
@@ -2147,9 +2221,43 @@ function autoTitle(code, inputText) {
 }
 
 // ============================================================
+// PLANTUML RENDER (via Kroki.io)
+// ============================================================
+function isPlantUML(code) {
+  return code.trim().startsWith('@startuml');
+}
+
+async function renderPlantUML(code) {
+  const out = document.getElementById('preview-output');
+  try {
+    const res = await fetch('https://kroki.io/plantuml/svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: code,
+    });
+    if (!res.ok) throw new Error(`Kroki 渲染失敗 (${res.status})`);
+    const svgText = await res.text();
+    out.innerHTML = `<div id="svg-wrap" style="transform-origin:top left; transform:scale(${currentZoom}); transition:transform 0.2s; display:inline-block; max-width:100%; padding:16px;">${svgText}</div>`;
+    const svgEl = out.querySelector('svg');
+    if (svgEl) {
+      svgEl.style.maxWidth = 'none';
+      svgEl.style.height = 'auto';
+      svgEl.style.display = 'block';
+      out.style.overflowX = 'auto';
+      out.style.overflowY = 'auto';
+      out.style.justifyContent = 'flex-start';
+      out.style.alignItems = 'flex-start';
+    }
+  } catch(e) {
+    out.innerHTML = `<div class="error-box">⚠ PlantUML 渲染錯誤<br><br>${escHtml(String(e.message || e))}</div>`;
+  }
+}
+
+// ============================================================
 // MERMAID RENDER
 // ============================================================
 async function renderMermaid(code) {
+  if (isPlantUML(code)) { await renderPlantUML(code); return; }
   const out = document.getElementById('preview-output');
   if (!code || !code.trim()) {
     out.innerHTML = emptyStateHTML('修改代碼後自動更新預覽');
