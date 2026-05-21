@@ -971,6 +971,38 @@ body {
   overflow-y: auto;
 }
 
+/* ===== EXPORT DROPDOWN ===== */
+.export-wrap {
+  position: relative;
+}
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  min-width: 180px;
+  z-index: 200;
+  overflow: hidden;
+}
+.export-menu button {
+  display: block;
+  width: 100%;
+  padding: 9px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.export-menu button:hover {
+  background: var(--surface3);
+}
+
 </style>
 </head>
 <body>
@@ -1088,8 +1120,14 @@ body {
         </select>
         <button class="btn btn-ghost btn-sm" onclick="copyShareLink()" title="複製分享連結">🔗 分享</button>
         <button class="btn btn-success btn-sm" onclick="saveDiagram()">💾 儲存到 GitHub</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportSVG()">↓ SVG</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportPNG()">↓ PNG</button>
+        <div class="export-wrap" id="export-wrap">
+          <button class="btn btn-ghost btn-sm" onclick="toggleExportMenu(event)">↓ 匯出 ▾</button>
+          <div class="export-menu hidden" id="export-menu">
+            <button onclick="exportSVG(); closeExportMenu()">📄 SVG 向量圖</button>
+            <button onclick="exportPNG(); closeExportMenu()">🖼 PNG 高清圖 (4x)</button>
+            <button onclick="exportPDF(); closeExportMenu()">📋 PDF 文件</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1206,6 +1244,7 @@ body {
         <div class="panel-header">
           <span class="panel-title">即時預覽</span>
           <div class="panel-actions">
+            <button class="btn-icon" onclick="openInDrawio()" title="在 Draw.io 中開啟並編輯">✏️ Draw.io</button>
             <button class="btn-icon" onclick="zoomIn()">＋</button>
             <button class="btn-icon" onclick="zoomOut()">－</button>
             <button class="btn-icon" onclick="resetZoom()">重置</button>
@@ -2822,6 +2861,91 @@ function clearCode() {
   document.getElementById('preview-output').innerHTML = emptyStateHTML();
 }
 
+// ============================================================
+// EXPORT MENU
+// ============================================================
+function toggleExportMenu(e) {
+  e?.stopPropagation();
+  const menu = document.getElementById('export-menu');
+  menu.classList.toggle('hidden');
+  if (!menu.classList.contains('hidden')) {
+    setTimeout(() => document.addEventListener('click', closeExportMenu, { once: true }), 0);
+  }
+}
+function closeExportMenu() {
+  document.getElementById('export-menu')?.classList.add('hidden');
+}
+
+function exportPDF() {
+  const svg = document.querySelector('#preview-output svg');
+  if (!svg) { toast('尚無流程圖可匯出', 'error'); return; }
+  const title = exportName();
+  const bgColor = currentTheme === 'dark' ? '#0c0f1a' : '#ffffff';
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+<style>
+  @page { margin:1.5cm; size:A4 landscape; }
+  body { margin:0; padding:0; display:flex; align-items:center; justify-content:center;
+         background:${bgColor}; min-height:100vh; }
+  svg  { max-width:100%; max-height:95vh; }
+  @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+</style></head><body>
+${svg.outerHTML}
+<script>window.onload=()=>{window.print();setTimeout(()=>window.close(),800);}<\/script>
+</body></html>`);
+  win.document.close();
+  toast('PDF 列印視窗已開啟 ✓', 'success');
+}
+
+// ============================================================
+// DRAW.IO INTEGRATION
+// ============================================================
+let _drawioHandler = null;
+
+function openInDrawio() {
+  const svg = document.querySelector('#preview-output svg');
+  const code = document.getElementById('mermaid-code').value.trim();
+  if (!svg && !code) { toast('尚無流程圖可編輯', 'error'); return; }
+
+  const modal = document.getElementById('drawio-modal');
+  modal.style.display = 'flex';
+
+  const iframe = document.getElementById('drawio-iframe');
+
+  // Build Draw.io URL — for Mermaid use their built-in import; for PlantUML/other use SVG
+  let drawioUrl;
+  if (code && !isPlantUML(code)) {
+    // Encode Mermaid as base64 for Draw.io's Mermaid import URL
+    try {
+      const encoded = btoa(unescape(encodeURIComponent(code)));
+      drawioUrl = `https://app.diagrams.net/?splash=0&ui=min&edit=_blank&src=mermaid&mermaid=${encoded}`;
+    } catch {
+      drawioUrl = 'https://app.diagrams.net/?splash=0&ui=min';
+    }
+  } else {
+    drawioUrl = 'https://app.diagrams.net/?splash=0&ui=min';
+  }
+
+  iframe.src = drawioUrl;
+  toast('Draw.io 載入中，編輯完成後點「匯入修改」', 'info');
+}
+
+function importFromDrawio() {
+  // Draw.io changes are in a new tab; close the modal and remind user to export SVG
+  toast('請在 Draw.io 中執行 File → Export As → SVG，然後使用「↓ 匯出」匯入', 'info');
+  closeDrawio();
+}
+
+function closeDrawio() {
+  const modal = document.getElementById('drawio-modal');
+  modal.style.display = 'none';
+  document.getElementById('drawio-iframe').src = '';
+  if (_drawioHandler) {
+    window.removeEventListener('message', _drawioHandler);
+    _drawioHandler = null;
+  }
+}
+
 function exportSVG() {
   const svg = document.querySelector('#preview-output svg');
   if (!svg) { toast('尚無流程圖可匯出', 'error'); return; }
@@ -3659,6 +3783,19 @@ function toBase64(file) {
       </div>
     </div>
   </div>
+</div>
+
+<!-- ===== DRAW.IO MODAL ===== -->
+<div id="drawio-modal" style="display:none; position:fixed; inset:0; z-index:500; flex-direction:column; background:#0c0f1a;">
+  <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:8px 16px; display:flex; align-items:center; gap:12px; flex-shrink:0;">
+    <span style="font-weight:600; color:var(--text); font-size:14px;">✏️ Draw.io 編輯器</span>
+    <span style="font-size:11px; color:var(--text-dim);">在 Draw.io 中編輯後，點擊右上角「File → Save」，再按下方「匯入修改」</span>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+      <button class="btn btn-primary btn-sm" onclick="importFromDrawio()">✓ 匯入修改</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeDrawio()">✕ 關閉</button>
+    </div>
+  </div>
+  <iframe id="drawio-iframe" style="flex:1; border:none; width:100%; height:100%;" allow="clipboard-read; clipboard-write"></iframe>
 </div>
 
 </body>
