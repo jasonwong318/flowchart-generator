@@ -1370,13 +1370,14 @@ function saveConfig() {
   const hasAI = gemini || deepseek || kimi || doubao;
   if (!hasAI) { toast('請至少配置一個 AI 模型 API Key', 'error'); return; }
 
+  // 欄位已預填現有值，空欄位代表用戶清除該項
   cfg = {
-    geminiKey: gemini || cfg.geminiKey || '',
-    deepseekKey: deepseek || cfg.deepseekKey || '',
-    kimiKey: kimi || cfg.kimiKey || '',
-    doubaoKey: doubao || cfg.doubaoKey || '',
-    githubToken: token || cfg.githubToken || '',
-    githubRepo: repo || cfg.githubRepo || '',
+    geminiKey: gemini,
+    deepseekKey: deepseek,
+    kimiKey: kimi,
+    doubaoKey: doubao,
+    githubToken: token,
+    githubRepo: repo,
   };
   localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
   document.getElementById('config-modal').classList.add('hidden');
@@ -2032,35 +2033,39 @@ async function callGemini(systemPrompt, text, pdf) {
 
   const models = ['gemini-3.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash'];
   let lastErr;
-  for (const model of models) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.geminiKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts }] }) }
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) {
-        const msg = data.error?.message || '';
-        const status = data.error?.status || '';
-        const isQuota = res.status === 429 || status === 'RESOURCE_EXHAUSTED' || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('resource_exhausted');
-        if (isQuota) {
-          lastErr = { quota: true, model, msg };
-          toast(`${model} 配額已滿，嘗試備用模型…`, 'info');
-          continue;
-        }
-        throw new Error(`[${res.status}${status ? ' '+status : ''}] ${msg || '未知錯誤'}`);
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const isLast = i === models.length - 1;
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cfg.geminiKey}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts }] }) }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) {
+      const msg = data.error?.message || '';
+      const status = data.error?.status || '';
+      const isQuota = res.status === 429 || status === 'RESOURCE_EXHAUSTED' || msg.toLowerCase().includes('quota');
+      const isNotFound = res.status === 404 || status === 'NOT_FOUND';
+      lastErr = { quota: isQuota, model, msg, httpStatus: res.status, status };
+      // 配額滿或模型不存在 → 嘗試下一個模型；其他錯誤（如 API key 無效）直接拋出
+      if ((isQuota || isNotFound) && !isLast) {
+        toast(isQuota ? `${model} 配額已滿，嘗試備用模型…` : `${model} 不可用，嘗試備用模型…`, 'info');
+        continue;
       }
-      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return { text: txt, model };
-    } catch(e) {
-      if (e.message?.includes('fetch') || e.name === 'TypeError') throw e;
-      if (!lastErr?.quota) throw e;
+      if (!isQuota && !isNotFound) {
+        throw new Error(`[${res.status}${status ? ' ' + status : ''}] ${msg || '未知錯誤'}`);
+      }
+      break;
     }
+    const txt = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return { text: txt, model };
   }
   const retryMatch = lastErr?.msg?.match(/retry in ([\d.]+)s/i);
   const retrySec = retryMatch ? `（請於 ${Math.ceil(parseFloat(retryMatch[1]))} 秒後重試）` : '';
-  throw new Error(`所有 Gemini 模型配額已用盡 ${retrySec}｜請稍後再試`);
+  throw new Error(lastErr?.quota
+    ? `所有 Gemini 模型配額已用盡 ${retrySec}｜請稍後再試`
+    : `所有 Gemini 模型均不可用｜${lastErr?.msg || '請檢查 API Key'}`);
 }
 
 // ============================================================
@@ -2308,6 +2313,7 @@ async function renderPlantUML(code) {
       out.style.overflowY = 'auto';
       out.style.justifyContent = 'flex-start';
       out.style.alignItems = 'flex-start';
+      requestAnimationFrame(() => fitDiagram());
     }
   } catch(e) {
     out.innerHTML = `<div class="error-box">⚠ PlantUML 渲染錯誤<small style="opacity:0.7;font-size:11px;">${escHtml(String(e.message || e))}</small></div>`;
@@ -2324,8 +2330,8 @@ async function renderMermaid(code) {
     out.innerHTML = emptyStateHTML('修改代碼後自動更新預覽');
     return;
   }
+  const uid = 'fc_svg_' + Date.now();
   try {
-    const uid = 'fc_svg_' + Date.now();
     const { svg } = await mermaid.render(uid, code);
 
     out.innerHTML = `<div id="svg-wrap" style="transform-origin:top left; transform:scale(${currentZoom}); transition:transform 0.2s; display:inline-block; max-width:100%;">${svg}</div>`;
@@ -2361,9 +2367,18 @@ async function renderMermaid(code) {
       requestAnimationFrame(() => fitDiagram());
     }
   } catch(e) {
+    removeMermaidErrorArtifacts(uid);
     const msg = String(e.message || e).split('\n')[0];
     out.innerHTML = `<div class="error-box">⚠ Mermaid 語法錯誤<br><small style="opacity:0.7;font-size:11px;word-break:break-all;">${escHtml(msg)}</small></div>`;
   }
+}
+
+// Mermaid 渲染失敗時會在 body 殘留錯誤 SVG（炸彈圖示），必須手動清除
+function removeMermaidErrorArtifacts(uid) {
+  document.getElementById(uid)?.remove();
+  document.getElementById('d' + uid)?.remove();
+  document.querySelectorAll('body > svg[aria-roledescription="error"], body > div[id^="dfc_"], body > div[id^="dtpl_"]')
+    .forEach(el => el.remove());
 }
 
 function enhanceMermaidSVG(svg) {
@@ -2648,26 +2663,40 @@ function extractNodeId(nodeEl) {
   return null;
 }
 
-function extractNodeText(code, nodeId) {
-  const escapedId = escapeRegex(nodeId);
-  const patterns = [
-    new RegExp(escapedId + '\[(.*?)\]'),
-    new RegExp(escapedId + '\((.*?)\)'),
-    new RegExp(escapedId + '\{(.*?)\}'),
-    new RegExp(escapedId + '\[\/(.*?)\/\]'),
-    new RegExp(escapedId + '\\\[(.*?)\\\]'),
-    new RegExp(escapedId + '\[\((.*?)\)\]'),
-    new RegExp(escapedId + '\(\((.*?)\)\)'),
-    new RegExp(escapedId + '>(.*?)\]'),
-  ];
+// 節點括號類型（次序重要：複合括號必須排在單一括號之前）
+const NODE_BRACKETS = [
+  ['([', '])'],   // 圓角矩形（開始/結束）
+  ['[(', ')]'],   // 圓柱體
+  ['[[', ']]'],   // 子流程
+  ['[/', '/]'],   // 平行四邊形
+  ['((', '))'],   // 圓形
+  ['{{', '}}'],   // 六邊形
+  ['>', ']'],     // 旗形
+  ['{', '}'],     // 菱形
+  ['[', ']'],     // 矩形
+  ['(', ')'],     // 圓角
+];
 
-  for (const pattern of patterns) {
-    const match = code.match(pattern);
-    if (match && match[1] !== undefined) {
-      return match[1].trim();
+// 在代碼中尋找節點定義，回傳 { full, open, close, text, index }
+function findNodeDef(code, nodeId) {
+  const eId = escapeRegex(nodeId);
+  for (const [open, close] of NODE_BRACKETS) {
+    const re = new RegExp(
+      '(^|[^\\w])(' + eId + ')' + escapeRegex(open) + '([^\\n]*?)' + escapeRegex(close),
+      'm'
+    );
+    const m = code.match(re);
+    if (m) {
+      const full = m[2] + open + m[3] + close;
+      return { full, open, close, text: m[3].trim(), index: m.index + m[1].length };
     }
   }
   return null;
+}
+
+function extractNodeText(code, nodeId) {
+  const def = findNodeDef(code, nodeId);
+  return def ? def.text : null;
 }
 
 function detectNodeShape(code, nodeId) {
@@ -2703,70 +2732,16 @@ function applyNodeEdit() {
   const code = document.getElementById('mermaid-code');
   let mermaidCode = code.value;
 
-  const oldText = extractNodeText(mermaidCode, editingNodeId);
-  if (oldText === null) {
+  const def = findNodeDef(mermaidCode, editingNodeId);
+  if (!def) {
     toast('無法定位節點，請在代碼編輯器中手動修改', 'error');
     closeNodeEditor();
     return;
   }
 
-  let newNodeDef = '';
-  const shape = editingNodeShape;
-  if (shape.includes('圓柱體')) newNodeDef = editingNodeId + '[(' + newText + ')]';
-  else if (shape.includes('平行四邊形')) newNodeDef = editingNodeId + '[/' + newText + '/]';
-  else if (shape.includes('矩形')) newNodeDef = editingNodeId + '[' + newText + ']';
-  else if (shape.includes('菱形')) newNodeDef = editingNodeId + '{' + newText + '}';
-  else if (shape.includes('圓形')) newNodeDef = editingNodeId + '((' + newText + '))';
-  else if (shape.includes('圓角矩形')) newNodeDef = editingNodeId + '(' + newText + ')';
-  else if (shape.includes('旗形')) newNodeDef = editingNodeId + '>' + newText + ']';
-  else newNodeDef = editingNodeId + '[' + newText + ']';
-
-  const eId = escapeRegex(editingNodeId);
-  const eText = escapeRegex(oldText);
-  const patterns = [
-    new RegExp(eId + '\[\(' + eText + '\)\]'),
-    new RegExp(eId + '\[\/' + eText + '\/\]'),
-    new RegExp(eId + '\\\[' + eText + '\\\]'),
-    new RegExp(eId + '\[' + eText + '\]'),
-    new RegExp(eId + '\(' + eText + '\)'),
-    new RegExp(eId + '\{' + eText + '\}'),
-    new RegExp(eId + '\(\(' + eText + '\)\)'),
-    new RegExp(eId + '>' + eText + '\]'),
-  ];
-
-  let replaced = false;
-  for (const pattern of patterns) {
-    if (pattern.test(mermaidCode)) {
-      mermaidCode = mermaidCode.replace(pattern, newNodeDef);
-      replaced = true;
-      break;
-    }
-  }
-
-  if (!replaced) {
-    const lines = mermaidCode.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (line.startsWith(editingNodeId)) {
-        const nodePattern = new RegExp('^([ \t]*)' + eId + '([\[\({>].*?[\]\)}\]])');
-        const match = lines[i].match(nodePattern);
-        if (match) {
-          lines[i] = lines[i].replace(nodePattern, '$1' + newNodeDef);
-          replaced = true;
-          break;
-        }
-      }
-    }
-    if (replaced) {
-      mermaidCode = lines.join('\n');
-    }
-  }
-
-  if (!replaced) {
-    toast('無法替換節點文字，請在代碼編輯器中手動修改', 'error');
-    closeNodeEditor();
-    return;
-  }
+  // 保留原本的括號形狀，只替換文字
+  const newNodeDef = editingNodeId + def.open + newText + def.close;
+  mermaidCode = mermaidCode.slice(0, def.index) + newNodeDef + mermaidCode.slice(def.index + def.full.length);
 
   code.value = mermaidCode;
   closeNodeEditor();
@@ -2905,7 +2880,6 @@ async function exportPDF() {
   if (!svg && !code) { toast('尚無流程圖可匯出', 'error'); return; }
   const title = exportName();
   const bgColor = currentTheme === 'dark' ? '#0c0f1a' : '#ffffff';
-  const textColor = currentTheme === 'dark' ? '#dce7f7' : '#1a202c';
 
   let svgHtml = svg?.outerHTML || '';
 
@@ -2915,21 +2889,26 @@ async function exportPDF() {
       const cfg = getMermaidConfig(currentTheme);
       cfg.flowchart = { ...cfg.flowchart, htmlLabels: false };
       mermaid.initialize(cfg);
-      const { svg: cleanSvg } = await mermaid.render('fc_pdf_' + Date.now(), code);
+      const pdfUid = 'fc_pdf_' + Date.now();
+      const { svg: cleanSvg } = await mermaid.render(pdfUid, code);
       svgHtml = cleanSvg;
     } catch { /* keep original */ } finally {
       mermaid.initialize(getMermaidConfig(currentTheme));
+      removeMermaidErrorArtifacts('');
     }
   }
 
+  if (!svgHtml) { toast('尚無流程圖可匯出', 'error'); return; }
+
   const win = window.open('', '_blank');
+  if (!win) { toast('彈出視窗被瀏覽器攔截，請允許彈出視窗後重試', 'error'); return; }
   win.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
 <style>
   @page { margin:1.5cm; size:A4 landscape; }
   body { margin:0; padding:16px; display:flex; align-items:center; justify-content:center;
          background:${bgColor}; min-height:100vh; }
   svg  { max-width:100%; max-height:90vh; }
-  text, .nodeLabel, .label { font-family: Arial, sans-serif !important; font-weight: 400 !important; fill: ${textColor}; }
+  text, .nodeLabel, .label { font-family: Arial, sans-serif !important; }
   @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
 </style></head><body>
 ${svgHtml}
@@ -2940,43 +2919,26 @@ ${svgHtml}
 }
 
 // ============================================================
-// DRAW.IO INTEGRATION
-// ============================================================
-let _drawioHandler = null;
-
-// ============================================================
-// DRAW.IO INTEGRATION  — opens in new tab (iframe blocked by diagrams.net)
+// DRAW.IO INTEGRATION — opens in new tab (iframe blocked by diagrams.net)
 // ============================================================
 function openInDrawio() {
   const code = document.getElementById('mermaid-code').value.trim();
   if (!code) { toast('尚無流程圖可編輯', 'error'); return; }
 
+  const win = window.open('https://app.diagrams.net/?splash=0', '_blank');
+  if (!win) { toast('彈出視窗被瀏覽器攔截，請允許彈出視窗後重試', 'error'); return; }
+
   if (!isPlantUML(code)) {
     navigator.clipboard.writeText(code).catch(() => {});
-    window.open('https://app.diagrams.net/?splash=0', '_blank');
     toast('✓ Mermaid 代碼已複製。在 Draw.io: Extras → Edit Diagram → Mermaid 頁簽貼上', 'success');
   } else {
+    // PlantUML 圖無法直接傳入 Draw.io，改為下載 SVG 供拖入
     const svg = document.querySelector('#preview-output svg');
     if (svg) {
-      const svgBlob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
-      const svgUrl = URL.createObjectURL(svgBlob);
-      window.open(`https://app.diagrams.net/?splash=0#U${encodeURIComponent(svgUrl)}`, '_blank');
-    } else {
-      window.open('https://app.diagrams.net/?splash=0', '_blank');
+      const blob = new Blob([svg.outerHTML], { type: 'image/svg+xml;charset=utf-8' });
+      dl(URL.createObjectURL(blob), exportName() + '.svg');
     }
-    toast('已開啟 Draw.io，可在其中匯入 SVG 進行編輯', 'info');
-  }
-}
-
-function importFromDrawio() { closeDrawio(); }
-
-function closeDrawio() {
-  const modal = document.getElementById('drawio-modal');
-  modal.style.display = 'none';
-  document.getElementById('drawio-iframe').src = '';
-  if (_drawioHandler) {
-    window.removeEventListener('message', _drawioHandler);
-    _drawioHandler = null;
+    toast('已下載 SVG，將檔案拖入 Draw.io 視窗即可編輯', 'info');
   }
 }
 
@@ -3008,6 +2970,7 @@ async function exportPNG() {
         svgString = exportSvg;
       } finally {
         mermaid.initialize(getMermaidConfig(currentTheme));
+        removeMermaidErrorArtifacts('');
       }
     } else {
       const svgEl = document.querySelector('#preview-output svg');
@@ -3371,7 +3334,7 @@ const TEMPLATES = [
   classDef process  fill:#2d3748,stroke:#a0aec0,stroke-width:1.5px,color:#e2e8f0
   classDef decision fill:#744210,stroke:#f6ad55,stroke-width:2px,color:#fefcbf,font-weight:600
   classDef docNode  fill:#553c9a,stroke:#b794f4,stroke-width:1.5px,color:#e9d8fd
-  classDef kcpNode  fill:#065f46,stroke:#34d399,stroke-width:2pxpx,color:#d1fae5
+  classDef kcpNode  fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5
 
   S([開始]) --> P1[制定審計計劃]
   P1 --> D1[/審計計劃書/]
@@ -3685,8 +3648,8 @@ async function previewTemplate(idx) {
   document.getElementById('tpl-load-btn').disabled = false;
   const svgBox = document.getElementById('tpl-preview-svg');
   svgBox.innerHTML = '<div style="color:var(--text-dim);font-size:12px;">渲染中…</div>';
+  const uid = 'tpl_prev_' + Date.now();
   try {
-    const uid = 'tpl_prev_' + Date.now();
     const { svg } = await mermaid.render(uid, t.code);
     svgBox.innerHTML = `<div style="max-width:100%;overflow:auto;">${svg}</div>`;
     const svgEl = svgBox.querySelector('svg');
@@ -3697,6 +3660,7 @@ async function previewTemplate(idx) {
       else enhanceMermaidSVGLight(svgEl);
     }
   } catch(e) {
+    removeMermaidErrorArtifacts(uid);
     svgBox.innerHTML = `<div style="color:var(--red);font-size:12px;font-family:var(--mono);">⚠ ${escHtml(String(e.message||e))}</div>`;
   }
 }
@@ -3838,19 +3802,6 @@ function toBase64(file) {
       </div>
     </div>
   </div>
-</div>
-
-<!-- ===== DRAW.IO MODAL ===== -->
-<div id="drawio-modal" style="display:none; position:fixed; inset:0; z-index:500; flex-direction:column; background:#0c0f1a;">
-  <div style="background:var(--surface); border-bottom:1px solid var(--border); padding:8px 16px; display:flex; align-items:center; gap:12px; flex-shrink:0;">
-    <span style="font-weight:600; color:var(--text); font-size:14px;">✏️ Draw.io 編輯器</span>
-    <span style="font-size:11px; color:var(--text-dim);">在 Draw.io 中編輯後，點擊右上角「File → Save」，再按下方「匯入修改」</span>
-    <div style="margin-left:auto; display:flex; gap:8px;">
-      <button class="btn btn-primary btn-sm" onclick="importFromDrawio()">✓ 匯入修改</button>
-      <button class="btn btn-ghost btn-sm" onclick="closeDrawio()">✕ 關閉</button>
-    </div>
-  </div>
-  <iframe id="drawio-iframe" style="flex:1; border:none; width:100%; height:100%;" allow="clipboard-read; clipboard-write"></iframe>
 </div>
 
 </body>
