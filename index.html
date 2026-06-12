@@ -1100,6 +1100,7 @@ body {
     <div class="sidebar-footer">
       <button class="btn btn-ghost btn-sm" style="flex:1; justify-content:center;" onclick="showConfig()">⚙ 設定</button>
       <button class="btn btn-ghost btn-sm" style="flex:1; justify-content:center;" onclick="refreshHistory()">⟳ 重整</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1; justify-content:center;" onclick="showBatchExport()" title="批量匯出歷史記錄">⇩ 批量</button>
     </div>
   </aside>
 
@@ -1226,8 +1227,13 @@ body {
       <!-- Code Panel -->
       <div class="panel" id="code-panel">
         <div class="panel-header">
-          <span class="panel-title">Mermaid 代碼編輯器</span>
+          <span class="panel-title">代碼編輯器 <span id="syntax-status" style="font-size:11px; font-weight:400; margin-left:6px;"></span></span>
           <div class="panel-actions">
+            <div class="export-wrap">
+              <button class="btn-icon" onclick="toggleVersionMenu(event)" title="版本歷史（最近 5 版）">↶ 版本</button>
+              <div class="export-menu hidden" id="version-menu" style="right:auto; left:0; min-width:240px; max-width:320px;"></div>
+            </div>
+            <button class="btn-icon" onclick="saveAsTemplate()" title="將目前代碼儲存為自訂範本">☆ 存範本</button>
             <button class="btn-icon" onclick="showTemplates()">📋 範本</button>
             <button class="btn-icon" onclick="copyCode()">複製</button>
             <button class="btn-icon" onclick="clearCode()">清除</button>
@@ -1278,8 +1284,11 @@ body {
 // ============================================================
 // CONSTANTS & STATE
 // ============================================================
-const CONFIG_KEY  = 'fc_gen_config_v2';
-const GITHUB_PATH = 'data/flowcharts.json';
+const CONFIG_KEY     = 'fc_gen_config_v2';
+const GITHUB_PATH    = 'data/flowcharts.json';
+const VERSIONS_KEY   = 'fc_gen_versions';
+const CUSTOM_TPL_KEY = 'fc_gen_custom_templates';
+const MAX_VERSIONS   = 5;
 
 let cfg           = {};
 let flowcharts    = [];
@@ -1516,6 +1525,8 @@ function getModelLabel(model) {
 function loadFlowchart(id) {
   const fc = flowcharts.find(f => f.id === id);
   if (!fc) return;
+  const existing = document.getElementById('mermaid-code').value.trim();
+  if (existing && existing !== (fc.mermaidCode || '')) pushVersion(existing, '切換記錄前');
   currentId = id;
   document.getElementById('diagram-title').value = fc.title || '';
   if (fc.inputText) document.getElementById('text-input').value = fc.inputText;
@@ -1612,6 +1623,10 @@ async function confirmDelete(id) {
 // AI GENERATION
 // ============================================================
 async function generateFlowchart() {
+  const existing = document.getElementById('mermaid-code').value.trim();
+  if (existing && !confirm('編輯器已有代碼，AI 生成將覆蓋現有內容。\n（現有代碼會自動存入「↶ 版本」，可隨時復原）\n\n繼續生成？')) return;
+  if (existing) pushVersion(existing, 'AI 生成前');
+
   if (activeTab === 'text') {
     const text = document.getElementById('text-input').value.trim();
     if (!text) { toast('請輸入流程描述', 'error'); return; }
@@ -2315,7 +2330,9 @@ async function renderPlantUML(code) {
       out.style.alignItems = 'flex-start';
       requestAnimationFrame(() => fitDiagram());
     }
+    setSyntaxStatus(true);
   } catch(e) {
+    setSyntaxStatus(false, 'PlantUML 渲染錯誤');
     out.innerHTML = `<div class="error-box">⚠ PlantUML 渲染錯誤<small style="opacity:0.7;font-size:11px;">${escHtml(String(e.message || e))}</small></div>`;
   }
 }
@@ -2328,6 +2345,7 @@ async function renderMermaid(code) {
   const out = document.getElementById('preview-output');
   if (!code || !code.trim()) {
     out.innerHTML = emptyStateHTML('修改代碼後自動更新預覽');
+    setSyntaxStatus(null);
     return;
   }
   const uid = 'fc_svg_' + Date.now();
@@ -2368,9 +2386,23 @@ async function renderMermaid(code) {
     }
   } catch(e) {
     removeMermaidErrorArtifacts(uid);
-    const msg = String(e.message || e).split('\n')[0];
-    out.innerHTML = `<div class="error-box">⚠ Mermaid 語法錯誤<br><small style="opacity:0.7;font-size:11px;word-break:break-all;">${escHtml(msg)}</small></div>`;
+    const raw = String(e.message || e);
+    const msg = raw.split('\n')[0];
+    const lineMatch = raw.match(/line\s+(\d+)/i);
+    setSyntaxStatus(false, lineMatch ? `第 ${lineMatch[1]} 行語法錯誤` : '語法錯誤');
+    out.innerHTML = `<div class="error-box">⚠ Mermaid 語法錯誤${lineMatch ? `（第 ${lineMatch[1]} 行）` : ''}<br><small style="opacity:0.7;font-size:11px;word-break:break-all;">${escHtml(msg)}</small></div>`;
+    return;
   }
+  setSyntaxStatus(true);
+}
+
+function setSyntaxStatus(ok, msg) {
+  const el = document.getElementById('syntax-status');
+  if (!el) return;
+  if (ok === null) { el.innerHTML = ''; return; }
+  el.innerHTML = ok
+    ? '<span style="color:var(--cyan);">✓ 語法正確</span>'
+    : `<span style="color:var(--red);">✗ ${escHtml(msg || '語法錯誤')}</span>`;
 }
 
 // Mermaid 渲染失敗時會在 body 殘留錯誤 SVG（炸彈圖示），必須手動清除
@@ -2853,10 +2885,108 @@ function copyCode() {
 }
 
 function clearCode() {
-  if (!document.getElementById('mermaid-code').value) return;
-  if (!confirm('清除目前代碼？')) return;
+  const code = document.getElementById('mermaid-code').value;
+  if (!code) return;
+  if (!confirm('清除目前代碼？（已自動存入版本歷史，可隨時復原）')) return;
+  pushVersion(code, '清除前');
   document.getElementById('mermaid-code').value = '';
   document.getElementById('preview-output').innerHTML = emptyStateHTML();
+}
+
+// ============================================================
+// VERSION HISTORY（localStorage，保留最近 5 版）
+// ============================================================
+function getVersions() {
+  try { return JSON.parse(localStorage.getItem(VERSIONS_KEY)) || []; } catch { return []; }
+}
+
+function pushVersion(code, label) {
+  if (!code || !code.trim()) return;
+  let versions = getVersions();
+  if (versions[0]?.code === code) return; // 與最新版相同則跳過
+  versions.unshift({ code, label: label || '', at: new Date().toISOString() });
+  versions = versions.slice(0, MAX_VERSIONS);
+  try { localStorage.setItem(VERSIONS_KEY, JSON.stringify(versions)); } catch {}
+}
+
+function toggleVersionMenu(e) {
+  e?.stopPropagation();
+  const menu = document.getElementById('version-menu');
+  if (menu.classList.contains('hidden')) {
+    const versions = getVersions();
+    menu.innerHTML = versions.length
+      ? versions.map((v, i) => {
+          const firstLine = v.code.split('\n').find(l => l.trim()) || '';
+          return `<button onclick="restoreVersion(${i})">
+            <div style="font-weight:600;">${fmtDate(v.at)}${v.label ? ' · ' + escHtml(v.label) : ''}</div>
+            <div style="font-size:11px; color:var(--text-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(firstLine.slice(0, 40))}</div>
+          </button>`;
+        }).join('')
+      : '<button disabled style="color:var(--text-dim); cursor:default;">尚無版本記錄</button>';
+    menu.classList.remove('hidden');
+    setTimeout(() => document.addEventListener('click', closeVersionMenu, { once: true }), 0);
+  } else {
+    menu.classList.add('hidden');
+  }
+}
+
+function closeVersionMenu() {
+  document.getElementById('version-menu')?.classList.add('hidden');
+}
+
+function restoreVersion(idx) {
+  const versions = getVersions();
+  const v = versions[idx];
+  if (!v) return;
+  const current = document.getElementById('mermaid-code').value;
+  if (current.trim() && current !== v.code) pushVersion(current, '復原前');
+  document.getElementById('mermaid-code').value = v.code;
+  renderMermaid(v.code);
+  closeVersionMenu();
+  toast(`已復原至 ${fmtDate(v.at)} 的版本 ✓`, 'success');
+}
+
+// ============================================================
+// CUSTOM TEMPLATES（localStorage 自訂範本）
+// ============================================================
+function getCustomTemplates() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_TPL_KEY)) || []; } catch { return []; }
+}
+
+function getAllTemplates() {
+  return [...TEMPLATES, ...getCustomTemplates().map(t => ({ ...t, custom: true }))];
+}
+
+function saveAsTemplate() {
+  const code = document.getElementById('mermaid-code').value.trim();
+  if (!code) { toast('尚無代碼可儲存為範本', 'error'); return; }
+  const defaultName = document.getElementById('diagram-title').value.trim() || '';
+  const name = prompt('請輸入範本名稱：', defaultName);
+  if (!name || !name.trim()) return;
+  const custom = getCustomTemplates();
+  custom.push({
+    name: name.trim().slice(0, 30),
+    icon: '⭐',
+    type: isPlantUML(code) ? 'PlantUML' : 'Custom',
+    code,
+  });
+  try {
+    localStorage.setItem(CUSTOM_TPL_KEY, JSON.stringify(custom));
+    toast(`範本「${name.trim()}」已儲存 ✓`, 'success');
+  } catch (e) {
+    toast('儲存失敗：' + e.message, 'error');
+  }
+}
+
+function deleteCustomTemplate(customIdx) {
+  const custom = getCustomTemplates();
+  const t = custom[customIdx];
+  if (!t) return;
+  if (!confirm(`刪除自訂範本「${t.name}」？`)) return;
+  custom.splice(customIdx, 1);
+  localStorage.setItem(CUSTOM_TPL_KEY, JSON.stringify(custom));
+  showTemplates();
+  toast('範本已刪除', 'info');
 }
 
 // ============================================================
@@ -2872,6 +3002,90 @@ function toggleExportMenu(e) {
 }
 function closeExportMenu() {
   document.getElementById('export-menu')?.classList.add('hidden');
+}
+
+// ============================================================
+// BATCH EXPORT（批量匯出歷史記錄）
+// ============================================================
+function showBatchExport() {
+  if (!flowcharts.length) { toast('尚無歷史記錄可匯出（請先儲存到 GitHub）', 'error'); return; }
+  const sorted = [...flowcharts].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  document.getElementById('batch-list').innerHTML = sorted.map(fc => `
+    <label style="display:flex; align-items:center; gap:10px; padding:8px 10px; cursor:pointer; border-radius:6px;"
+           onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <input type="checkbox" class="batch-check" value="${fc.id}" checked>
+      <span style="flex:1; font-size:13px;">${escHtml(fc.title)}</span>
+      <span style="font-size:11px; color:var(--text-dim);">${fmtDate(fc.updatedAt)}</span>
+    </label>
+  `).join('');
+  document.getElementById('batch-modal').classList.remove('hidden');
+}
+
+function closeBatchExport() {
+  document.getElementById('batch-modal').classList.add('hidden');
+}
+
+function toggleBatchAll(checked) {
+  document.querySelectorAll('.batch-check').forEach(c => { c.checked = checked; });
+}
+
+async function runBatchExport(format) {
+  const ids = [...document.querySelectorAll('.batch-check:checked')].map(c => c.value);
+  if (!ids.length) { toast('請至少勾選一個流程圖', 'error'); return; }
+  const items = ids.map(id => flowcharts.find(f => f.id === id)).filter(Boolean);
+  closeBatchExport();
+
+  const bgColor = getExportBgColor();
+  const results = [];
+  let failed = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const fc = items[i];
+    showLoading(`正在匯出 ${i + 1}/${items.length}：${fc.title}`);
+    try {
+      const svgString = await renderCodeForExport(fc.mermaidCode || '');
+      results.push({ title: fc.title, svgString });
+    } catch (e) {
+      console.error(`batch export failed for ${fc.title}:`, e);
+      failed++;
+    }
+  }
+
+  try {
+    if (format === 'png') {
+      for (const r of results) {
+        const pngUrl = await svgStringToPNG(r.svgString, bgColor);
+        dl(pngUrl, r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60) + '.png');
+        await new Promise(res => setTimeout(res, 300)); // 避免瀏覽器攔截連續下載
+      }
+      toast(`已匯出 ${results.length} 張 PNG${failed ? `（${failed} 張失敗）` : ''} ✓`, failed ? 'info' : 'success');
+    } else {
+      const win = window.open('', '_blank');
+      if (!win) { toast('彈出視窗被瀏覽器攔截，請允許彈出視窗後重試', 'error'); return; }
+      const pages = results.map(r => `
+        <div style="page-break-after:always; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:95vh;">
+          <h2 style="font-family:Arial,sans-serif; margin-bottom:16px;">${escHtml(r.title)}</h2>
+          ${r.svgString}
+        </div>`).join('');
+      win.document.write(`<!DOCTYPE html><html><head><title>批量匯出流程圖</title>
+<style>
+  @page { margin:1.5cm; size:A4 landscape; }
+  body { margin:0; background:${bgColor}; color:${bgColor === '#ffffff' ? '#000' : '#dce7f7'}; }
+  svg { max-width:100%; max-height:80vh; }
+  text, .nodeLabel, .label { font-family: Arial, sans-serif !important; }
+  @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+</style></head><body>
+${pages}
+<script>window.onload=()=>{window.print();setTimeout(()=>window.close(),800);}<\/script>
+</body></html>`);
+      win.document.close();
+      toast(`PDF 列印視窗已開啟（共 ${results.length} 頁）✓`, 'success');
+    }
+  } catch (e) {
+    toast('批量匯出失敗：' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
 }
 
 async function exportPDF() {
@@ -2950,130 +3164,92 @@ function exportSVG() {
   toast('SVG 已下載', 'success');
 }
 
-async function exportPNG() {
-  const code = document.getElementById('mermaid-code').value.trim();
-  const hasSVG = !!document.querySelector('#preview-output svg');
-  if (!code && !hasSVG) { toast('尚無流程圖可匯出', 'error'); return; }
+function getExportBgColor() {
+  if (currentTheme === 'dark') return '#0c0f1a';
+  if (currentTheme === 'bw' || currentTheme === 'blackwhite') return '#ffffff';
+  return '#f8fafc';
+}
 
-  showLoading('正在生成 PNG...');
-
+// 將代碼渲染成匯出用 SVG 字串（Mermaid 用 htmlLabels:false 避免模糊；PlantUML 經 Kroki）
+async function renderCodeForExport(code) {
+  if (isPlantUML(code)) {
+    const res = await fetch('https://kroki.io/plantuml/svg', {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: code,
+    });
+    if (!res.ok) throw new Error(`Kroki 渲染失敗 (${res.status})`);
+    return await res.text();
+  }
+  const exportCfg = getMermaidConfig(currentTheme);
+  exportCfg.flowchart = { ...exportCfg.flowchart, htmlLabels: false };
+  mermaid.initialize(exportCfg);
   try {
-    let svgString;
+    const uid = 'fc_exp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const { svg } = await mermaid.render(uid, code);
+    return svg;
+  } finally {
+    mermaid.initialize(getMermaidConfig(currentTheme));
+    removeMermaidErrorArtifacts('');
+  }
+}
 
-    if (code && !isPlantUML(code)) {
-      // Re-render with htmlLabels:false → pure SVG text, no foreignObject → no canvas taint, no blur
-      const exportCfg = getMermaidConfig(currentTheme);
-      exportCfg.flowchart = { ...exportCfg.flowchart, htmlLabels: false };
-      mermaid.initialize(exportCfg);
-      try {
-        const { svg: exportSvg } = await mermaid.render('fc_exp_' + Date.now(), code);
-        svgString = exportSvg;
-      } finally {
-        mermaid.initialize(getMermaidConfig(currentTheme));
-        removeMermaidErrorArtifacts('');
-      }
-    } else {
-      const svgEl = document.querySelector('#preview-output svg');
-      if (!svgEl) { hideLoading(); toast('尚無流程圖', 'error'); return; }
-      svgString = new XMLSerializer().serializeToString(svgEl);
-    }
+function getSVGDimensions(svgEl) {
+  let w, h;
+  const vb = svgEl?.getAttribute('viewBox');
+  if (vb) {
+    const p = vb.split(/[\s,]+/).map(Number);
+    if (p.length >= 4 && p[2] > 0 && p[3] > 0) { w = p[2]; h = p[3]; }
+  }
+  if (!w || !h) {
+    const wAttr = svgEl?.getAttribute('width');
+    const hAttr = svgEl?.getAttribute('height');
+    if (wAttr && hAttr) { w = parseFloat(wAttr); h = parseFloat(hAttr); }
+  }
+  return { width: Math.max(w || 800, 100), height: Math.max(h || 600, 100) };
+}
 
-    // Parse into DOM to get dimensions
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(svgString, 'image/svg+xml');
-    const svgEl2 = doc.querySelector('svg');
-
-    const scale = 3;
-    let svgWidth, svgHeight;
-
-    const viewBox = svgEl2?.getAttribute('viewBox');
-    if (viewBox) {
-      const parts = viewBox.split(/[\s,]+/).map(Number);
-      if (parts.length >= 4 && parts[2] > 0 && parts[3] > 0) {
-        svgWidth = parts[2]; svgHeight = parts[3];
-      }
-    }
-    if (!svgWidth || !svgHeight) {
-      const wAttr = svgEl2?.getAttribute('width');
-      const hAttr = svgEl2?.getAttribute('height');
-      if (wAttr && hAttr) { svgWidth = parseFloat(wAttr); svgHeight = parseFloat(hAttr); }
-    }
-    if (!svgWidth || !svgHeight || svgWidth <= 0 || svgHeight <= 0) {
-      const liveSvg = document.querySelector('#preview-output svg');
-      if (liveSvg) { try { const bb = liveSvg.getBBox(); svgWidth = bb.width; svgHeight = bb.height; } catch {} }
-    }
-    svgWidth = Math.max(svgWidth || 800, 100);
-    svgHeight = Math.max(svgHeight || 600, 100);
-
-    let bgColor;
-    if (currentTheme === 'dark') bgColor = '#0c0f1a';
-    else if (currentTheme === 'bw' || currentTheme === 'blackwhite') bgColor = '#ffffff';
-    else bgColor = '#f8fafc';
-
-    // For re-rendered pure-SVG-text export, just add bg rect; no foreignObject to worry about
-    const sanitizedSvg = svgEl2 ? sanitizeSVGForExport(svgEl2, bgColor) : svgString;
-
+// SVG 字串 → PNG data URL
+function svgStringToPNG(svgString, bgColor, scale = 3) {
+  return new Promise((resolve, reject) => {
+    const svgEl = new DOMParser().parseFromString(svgString, 'image/svg+xml').querySelector('svg');
+    if (!svgEl) return reject(new Error('SVG 解析失敗'));
+    const { width, height } = getSVGDimensions(svgEl);
+    const sanitized = sanitizeSVGForExport(svgEl, bgColor);
     const img = new Image();
-
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = Math.ceil(svgWidth * scale);
-        canvas.height = Math.ceil(svgHeight * scale);
+        canvas.width = Math.ceil(width * scale);
+        canvas.height = Math.ceil(height * scale);
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const pngUrl = canvas.toDataURL('image/png');
-        dl(pngUrl, exportName() + '.png');
-        toast('PNG 已下載 ✓', 'success');
-      } catch (err) {
-        console.error('Canvas error:', err);
-        // 方法 2 備選: 嘗試截圖
-        toast('Canvas 失敗, 嘗試替代方案...', 'info');
-        exportPNGByScreenshot(scale, bgColor);
-      } finally { hideLoading(); }
+        resolve(canvas.toDataURL('image/png'));
+      } catch (err) { reject(err); }
     };
-
-    img.onerror = () => {
-      toast('圖片載入失敗, 嘗試替代方案...', 'error');
-      exportPNGByScreenshot(scale, bgColor);
-    };
-
-    // 使用 data URI
-    const svgBase64 = btoa(unescape(encodeURIComponent(sanitizedSvg)));
-    img.src = 'data:image/svg+xml;base64,' + svgBase64;
-
-    setTimeout(() => { hideLoading(); }, 12000);
-
-  } catch (e) {
-    console.error('exportPNG error:', e);
-    toast('PNG 導出失敗：' + e.message, 'error');
-    hideLoading();
-  }
+    img.onerror = () => reject(new Error('SVG 圖片載入失敗'));
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(sanitized)));
+  });
 }
 
-// 替代方案: 使用 DOM 截圖 (不依賴 SVG 載入)
-async function exportPNGByScreenshot(scale, bgColor) {
-  try {
-    const wrap = document.getElementById('svg-wrap');
-    if (!wrap) {
-      toast('無法找到流程圖元素', 'error');
-      hideLoading();
-      return;
-    }
+async function exportPNG() {
+  const code = document.getElementById('mermaid-code').value.trim();
+  const liveSvg = document.querySelector('#preview-output svg');
+  if (!code && !liveSvg) { toast('尚無流程圖可匯出', 'error'); return; }
 
-    // 使用現代瀏覽器的 captureViewport/captureElement (如果可用)
-    // 或者使用 html-to-image 庫
-    // 這裡使用一個簡單的替代: 直接下載 SVG
-    toast('PNG 生成受限, 改為下載高清 SVG', 'info');
-    const svg = document.querySelector('#preview-output svg');
-    if (svg) {
-      const sanitized = sanitizeSVGForExport(svg, bgColor);
-      downloadSVG(sanitized);
-    }
+  showLoading('正在生成 PNG...');
+  try {
+    const svgString = code
+      ? await renderCodeForExport(code)
+      : new XMLSerializer().serializeToString(liveSvg);
+    const pngUrl = await svgStringToPNG(svgString, getExportBgColor());
+    dl(pngUrl, exportName() + '.png');
+    toast('PNG 已下載 ✓', 'success');
   } catch (e) {
-    toast('替代方案也失敗：' + e.message, 'error');
+    console.error('exportPNG error:', e);
+    toast('PNG 匯出失敗，改為下載 SVG', 'info');
+    const svg = document.querySelector('#preview-output svg');
+    if (svg) downloadSVG(sanitizeSVGForExport(svg, getExportBgColor()));
   } finally {
     hideLoading();
   }
@@ -3179,10 +3355,6 @@ function downloadSVG(svgString) {
   const url = URL.createObjectURL(blob);
   dl(url, exportName() + '.svg');
   toast('已下載 SVG 格式 ✓', 'info');
-}
-
-function fallbackSvgToPng(svgData, svgWidth, svgHeight, scale, bgColor) {
-  downloadSVG(svgData);
 }
 
 function exportName() {
@@ -3621,13 +3793,16 @@ let activeTplIdx = -1;
 
 function showTemplates() {
   activeTplIdx = -1;
-  document.getElementById('tpl-list').innerHTML = TEMPLATES.map((t, i) => `
-    <div class="tpl-card" id="tpl-card-${i}" onclick="previewTemplate(${i})">
+  const all = getAllTemplates();
+  const builtinCount = TEMPLATES.length;
+  document.getElementById('tpl-list').innerHTML = all.map((t, i) => `
+    <div class="tpl-card" id="tpl-card-${i}" onclick="previewTemplate(${i})" style="position:relative;">
       <div class="tpl-icon">${t.icon}</div>
       <div class="tpl-info">
-        <div class="tpl-name">${t.name}</div>
-        <div class="tpl-badge">${t.type}</div>
+        <div class="tpl-name">${escHtml(t.name)}</div>
+        <div class="tpl-badge">${escHtml(t.type)}${t.custom ? ' · 自訂' : ''}</div>
       </div>
+      ${t.custom ? `<button onclick="event.stopPropagation(); deleteCustomTemplate(${i - builtinCount})" title="刪除自訂範本" style="position:absolute; top:6px; right:8px; background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:12px;">✕</button>` : ''}
     </div>
   `).join('');
   document.getElementById('tpl-preview-svg').innerHTML = '<div style="color:var(--text-dim);font-size:13px;">← 選擇左側範本預覽</div>';
@@ -3640,7 +3815,8 @@ function showTemplates() {
 
 async function previewTemplate(idx) {
   activeTplIdx = idx;
-  const t = TEMPLATES[idx];
+  const t = getAllTemplates()[idx];
+  if (!t) return;
   document.querySelectorAll('.tpl-card').forEach(c => c.classList.remove('active'));
   document.getElementById(`tpl-card-${idx}`)?.classList.add('active');
   document.getElementById('tpl-preview-code').textContent = t.code;
@@ -3648,6 +3824,21 @@ async function previewTemplate(idx) {
   document.getElementById('tpl-load-btn').disabled = false;
   const svgBox = document.getElementById('tpl-preview-svg');
   svgBox.innerHTML = '<div style="color:var(--text-dim);font-size:12px;">渲染中…</div>';
+
+  // PlantUML 範本經 Kroki 渲染預覽
+  if (isPlantUML(t.code)) {
+    try {
+      const res = await fetch('https://kroki.io/plantuml/svg', {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: t.code,
+      });
+      if (!res.ok) throw new Error(`Kroki ${res.status}`);
+      svgBox.innerHTML = `<div style="max-width:100%;overflow:auto;">${await res.text()}</div>`;
+    } catch(e) {
+      svgBox.innerHTML = `<div style="color:var(--red);font-size:12px;font-family:var(--mono);">⚠ ${escHtml(String(e.message||e))}</div>`;
+    }
+    return;
+  }
+
   const uid = 'tpl_prev_' + Date.now();
   try {
     const { svg } = await mermaid.render(uid, t.code);
@@ -3671,7 +3862,10 @@ function closeTpl() {
 
 function confirmLoadTemplate() {
   if (activeTplIdx < 0) return;
-  const t = TEMPLATES[activeTplIdx];
+  const t = getAllTemplates()[activeTplIdx];
+  if (!t) return;
+  const existing = document.getElementById('mermaid-code').value.trim();
+  if (existing && existing !== t.code) pushVersion(existing, '載入範本前');
   document.getElementById('mermaid-code').value = t.code;
   renderMermaid(t.code);
   if (!document.getElementById('diagram-title').value.trim()) {
@@ -3800,6 +3994,24 @@ function toBase64(file) {
           <button class="btn btn-primary btn-sm" id="tpl-load-btn" onclick="confirmLoadTemplate()" disabled>載入至編輯器</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BATCH EXPORT MODAL ===== -->
+<div class="modal-backdrop hidden" id="batch-modal" onclick="if(event.target===this)closeBatchExport()">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">批量匯出 📦</div>
+    <div class="modal-desc">勾選要匯出的流程圖（來自 GitHub 歷史記錄），PNG 逐張下載，PDF 合併為一份文件。</div>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="toggleBatchAll(true)">全選</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleBatchAll(false)">全不選</button>
+    </div>
+    <div id="batch-list" style="max-height:300px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:6px;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeBatchExport()">取消</button>
+      <button class="btn btn-ghost" onclick="runBatchExport('pdf')">📋 匯出 PDF</button>
+      <button class="btn btn-primary" onclick="runBatchExport('png')">🖼 匯出 PNG</button>
     </div>
   </div>
 </div>
