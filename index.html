@@ -1277,6 +1277,7 @@ body {
               <button class="btn-icon" onclick="toggleVersionMenu(event)" title="版本歷史（最近 5 版）">↶ 版本</button>
               <div class="export-menu hidden" id="version-menu" style="right:auto; left:0; min-width:240px; max-width:320px;"></div>
             </div>
+            <button class="btn-icon" onclick="aiBeautify()" title="AI 重新排版美化（保留流程邏輯不變）">✨ AI 美化</button>
             <button class="btn-icon" onclick="saveAsTemplate()" title="將目前代碼儲存為自訂範本">☆ 存範本</button>
             <button class="btn-icon" onclick="showTemplates()">📋 範本</button>
             <button class="btn-icon" onclick="copyCode()">複製</button>
@@ -1962,8 +1963,9 @@ ${COMMON_RULES}
 3. 手寫文字模糊時，按上下文推斷最合理的繁體中文寫法
 4. 形狀對應：橢圓/圓角框→([文字])、矩形→[文字]、菱形→{文字}、平行四邊形→[/文字/]、圓柱→[(文字)]
 5. 原圖大致由上至下就用 flowchart TD，由左至右就用 flowchart LR
-6. 箭頭上的文字（如 是/否）用 -- 標籤 --> 保留
+6. 箭頭上的文字（如 是/否）用 -- 標籤 --> 保留，標籤保持簡短（2-6 字）
 7. 無法辨認的節點，文字寫〔無法辨認〕讓用戶修正
+8. 節點文字超過 12 字用 <br> 換行成兩行，保持節點寬度均勻
 
 ${styleBlock}
 
@@ -1990,6 +1992,13 @@ ${COMMON_RULES}
 • 正常流程：-->
 • 帶條件標籤：-- 條件文字 -->（決策分支必須標示 是/否、通過/退回 等）
 • 返回/重做循環：用虛線 -.->
+
+【排版品質要求 — 圖表必須清晰美觀】
+1. 節點文字用兩行格式，第一行編號/名稱、第二行說明，用 <br> 分隔（如 P1[PUR01<br>方案審批]）；單行超過 12 字必須用 <br> 換行
+2. 連線標籤必須簡短（2-6 字），較長的說明放入節點文字內，不要掛在連線上
+3. 盡量減少連線交叉：相關步驟放在同一分支；多條分支的共同後續步驟先滙合到一個節點再繼續
+4. 決策分支必須平衡：是/否 兩邊都要有明確的完整路徑和終點，不可留空
+5. 同一層級的平行步驟數量控制在 4 個以內，過多時分組或分層
 
 ${styleBlock}
 
@@ -2045,6 +2054,64 @@ async function callAI({ text, pdf, image, imageMime }) {
     toast('生成失敗：' + e.message, 'error');
     setStatus('錯誤', false);
     console.error(e);
+  } finally {
+    hideLoading();
+  }
+}
+
+// ============================================================
+// AI 美化 — 重新排版現有代碼，流程邏輯不變
+// ============================================================
+async function aiBeautify() {
+  const code = document.getElementById('mermaid-code').value.trim();
+  if (!code) { toast('尚無代碼可美化', 'error'); return; }
+  if (isPlantUML(code)) { toast('PlantUML 圖暫不支援 AI 美化，可直接修改代碼', 'info'); return; }
+
+  pushVersion(code, 'AI 美化前');
+  setStatus('AI 美化中...', true);
+  showLoading('AI 正在優化排版與樣式...');
+
+  const settings = getUserSettings();
+  const colors = {
+    professional: 'startEnd fill:#065f46,stroke:#34d399,stroke-width:2px,color:#d1fae5 | process fill:#1e3a5f,stroke:#60a5fa,stroke-width:1.5px,color:#e8f0fe | decision fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fef3c7 | docNode fill:#3b0764,stroke:#c084fc,stroke-width:1.5px,color:#f3e8ff',
+  };
+  const styleBlock = settings.style === 'business'
+    ? `4. 加入或修正 classDef（startEnd/process/decision/docNode 四類，參考配色：${colors.professional}），並確保每個節點都套用了合適的 class`
+    : '4. 移除所有 classDef、class、style 指令，保持純結構代碼（渲染器會自動套用風格）';
+
+  const systemPrompt = `你是 Mermaid.js 排版專家。用戶會提供一段 Mermaid 代碼，請重新排版美化，但絕對不可改變流程邏輯。
+
+【必須遵守】
+1. 保留所有節點和連線的語義：不可增減步驟、不可改變連接關係、不可改寫節點文字的意思
+2. 只輸出純 Mermaid 代碼，不要任何說明文字或 markdown 代碼塊符號
+
+【美化目標】
+3. 排版優化：
+   • 節點文字改成兩行格式（第一行編號/名稱，第二行說明，用 <br> 分隔）；超過 12 字換行
+   • 連線標籤縮短至 2-6 字，過長的移入節點文字
+   • 重新安排節點定義順序以減少連線交叉；共同後續步驟先滙合
+   • 檢查決策分支是否平衡，有缺失路徑就補上明確終點（僅限原邏輯已隱含的）
+${styleBlock}
+5. 修正明顯的語法錯誤（如有）`;
+
+  try {
+    let result;
+    switch (currentAIModel) {
+      case 'gemini': result = await callGemini(systemPrompt, code); break;
+      case 'glm': result = await callGLM(systemPrompt, code); break;
+      case 'deepseek': result = await callDeepSeek(systemPrompt, code); break;
+      case 'kimi': result = await callKimi(systemPrompt, code); break;
+      case 'doubao': result = await callDoubao(systemPrompt, code); break;
+      default: result = await callGemini(systemPrompt, code);
+    }
+    const newCode = cleanMermaid(result.text);
+    document.getElementById('mermaid-code').value = newCode;
+    await renderMermaid(newCode);
+    toast(`排版已優化 ✓（${result.model}）｜可用「↶ 版本」還原`, 'success');
+    setStatus('美化完成', false);
+  } catch (e) {
+    toast('美化失敗：' + e.message, 'error');
+    setStatus('錯誤', false);
   } finally {
     hideLoading();
   }
@@ -2653,6 +2720,15 @@ function enhanceMermaidSVGLight(svg) {
     .edgePath path { stroke-width: 2px !important; }
     .nodeLabel, .label { font-weight: 500 !important; }
     .cluster rect { filter: drop-shadow(0 3px 10px rgba(0,0,0,0.1)); }
+    .edgeLabel foreignObject div {
+      background: #ffffff !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 4px !important;
+      padding: 1px 6px !important;
+      font-size: 11px !important; font-weight: 600 !important;
+      color: #334155 !important;
+    }
+    .edgeLabel, .edgeLabel rect { background: #ffffff !important; fill: #ffffff !important; }
   `;
   svg.insertBefore(style, svg.firstChild);
 }
@@ -3537,7 +3613,7 @@ function dl(url, name) {
 function getMermaidConfig(theme) {
   const base = {
     startOnLoad: false,
-    flowchart: { htmlLabels: true, curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 70, subgraphMargin: 20, useMaxWidth: true },
+    flowchart: { htmlLabels: true, curve: 'basis', padding: 24, nodeSpacing: 65, rankSpacing: 85, subgraphMargin: 20, useMaxWidth: true },
     securityLevel: 'loose',
   };
 
