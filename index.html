@@ -349,7 +349,7 @@ body {
 }
 #text-input::placeholder { color: var(--text-dim); }
 
-#pdf-zone {
+#pdf-zone, #sketch-zone {
   width: 100%;
   height: 76px;
   border: 2px dashed var(--border);
@@ -364,16 +364,46 @@ body {
   gap: 8px;
   user-select: none;
 }
-#pdf-zone:hover, #pdf-zone.dragover {
+#pdf-zone:hover, #pdf-zone.dragover,
+#sketch-zone:hover, #sketch-zone.dragover {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-dim);
 }
-#pdf-zone.has-file {
+#pdf-zone.has-file, #sketch-zone.has-file {
   border-style: solid;
   border-color: var(--cyan);
   color: var(--cyan);
   background: rgba(6,214,160,0.07);
+}
+
+#sketch-preview {
+  max-height: 60px;
+  max-width: 120px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+}
+
+/* ===== GUIDED STEP ROWS ===== */
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.step-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  min-width: 62px;
+  user-select: none;
+}
+.step-row .tab-pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .action-row {
@@ -903,6 +933,7 @@ body {
   letter-spacing: 0.05em;
 }
 .badge-gemini { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.badge-glm { background: rgba(56,189,248,0.15); color: #38bdf8; }
 .badge-deepseek { background: rgba(6,214,160,0.15); color: #34d399; }
 .badge-kimi { background: rgba(251,146,60,0.15); color: #fb923c; }
 .badge-doubao { background: rgba(167,139,250,0.15); color: #a78bfa; }
@@ -1017,6 +1048,7 @@ body {
 
     <div style="display:flex; gap:8px; margin-bottom:18px;">
       <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('gemini')" id="cfg-tab-gemini" style="flex:1; justify-content:center;">Gemini</button>
+      <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('glm')" id="cfg-tab-glm" style="flex:1; justify-content:center;">GLM</button>
       <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('deepseek')" id="cfg-tab-deepseek" style="flex:1; justify-content:center;">DeepSeek</button>
       <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('kimi')" id="cfg-tab-kimi" style="flex:1; justify-content:center;">Kimi</button>
       <button class="btn btn-ghost btn-sm" onclick="switchConfigTab('doubao')" id="cfg-tab-doubao" style="flex:1; justify-content:center;">豆包</button>
@@ -1026,7 +1058,15 @@ body {
       <div class="form-group">
         <label class="form-label">Gemini API Key</label>
         <input class="form-input" type="password" id="cfg-gemini" placeholder="AIzaSy...">
-        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">取得方式：Google AI Studio → 建立 API Key</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">取得方式：Google AI Studio → 建立 API Key（唯一支援手繪草圖圖片輸入的模型）</div>
+      </div>
+    </div>
+
+    <div id="cfg-panel-glm" class="hidden">
+      <div class="form-group">
+        <label class="form-label">GLM (智譜) API Key</label>
+        <input class="form-input" type="password" id="cfg-glm" placeholder="...">
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">取得方式：智譜開放平台 open.bigmodel.cn → API Keys（Flash 系列免費，僅支援文字輸入）</div>
       </div>
     </div>
 
@@ -1125,7 +1165,8 @@ body {
           <button class="btn btn-ghost btn-sm" onclick="toggleExportMenu(event)">↓ 匯出 ▾</button>
           <div class="export-menu hidden" id="export-menu">
             <button onclick="exportSVG(); closeExportMenu()">📄 SVG 向量圖</button>
-            <button onclick="exportPNG(); closeExportMenu()">🖼 PNG 高清圖 (4x)</button>
+            <button onclick="exportPNG(); closeExportMenu()">🖼 PNG 高清圖</button>
+            <button onclick="exportJPEG(); closeExportMenu()">📸 JPEG 圖片</button>
             <button onclick="exportPDF(); closeExportMenu()">📋 PDF 文件</button>
           </div>
         </div>
@@ -1134,11 +1175,73 @@ body {
 
     <!-- INPUT AREA -->
     <div id="input-area">
-      <!-- AI Model Selector -->
-      <div class="ai-model-row">
-        <span class="ai-model-label">🤖 AI 模型</span>
+      <!-- ① 輸入方式 -->
+      <div class="step-row">
+        <span class="step-label">① 輸入</span>
+        <button class="tab-pill active" id="tab-text" onclick="switchTab('text')">📝 文字描述</button>
+        <button class="tab-pill" id="tab-sketch" onclick="switchTab('sketch')">📷 手繪草圖</button>
+        <button class="tab-pill" id="tab-pdf" onclick="switchTab('pdf')">📄 PDF 文件</button>
+      </div>
+      <div id="text-panel">
+        <textarea id="text-input" placeholder="描述業務流程，例如：採購申請由申請人填寫PR表，部門主管審批後，超過5萬元需CFO批准，財務部收到後安排付款並完成記帳...&#10;組織架構圖示例：總經理下設營運部、財務部、人力資源部；營運部有採購組同倉務組..."></textarea>
+      </div>
+      <div id="sketch-panel" class="hidden">
+        <div id="sketch-zone" onclick="document.getElementById('sketch-file').click()">
+          <span style="font-size:20px;">📷</span>
+          <span id="sketch-label">拖放手繪草圖（JPG / PNG），或點擊此處上傳</span>
+          <img id="sketch-preview" class="hidden" alt="">
+        </div>
+        <input type="file" id="sketch-file" accept="image/jpeg,image/png,image/webp" style="display:none">
+      </div>
+      <div id="pdf-panel" class="hidden">
+        <div id="pdf-zone" onclick="document.getElementById('pdf-file').click()">
+          <span style="font-size:20px;">📄</span>
+          <span id="pdf-label">拖放 PDF 制度文件，或點擊此處上傳</span>
+        </div>
+        <input type="file" id="pdf-file" accept=".pdf" style="display:none">
+      </div>
+
+      <!-- ② 圖表類型 -->
+      <div class="step-row" style="margin-top:10px;">
+        <span class="step-label">② 類型</span>
+        <button class="tab-pill active" id="type-flowchart" onclick="setDiagramType('flowchart')">🔀 流程圖／決策樹</button>
+        <button class="tab-pill" id="type-swimlane" onclick="setDiagramType('swimlane')">🏊 泳道圖</button>
+        <button class="tab-pill" id="type-orgchart" onclick="setDiagramType('orgchart')">🏢 組織架構圖</button>
+        <button class="tab-pill" id="type-sketch" onclick="setDiagramType('sketch')">✏️ 草圖整理</button>
+      </div>
+
+      <!-- ③ 風格 -->
+      <div class="step-row">
+        <span class="step-label">③ 風格</span>
+        <button class="tab-pill active" id="style-business" onclick="setStyle('business')">🏢 商務簡潔</button>
+        <button class="tab-pill" id="style-handdrawn" onclick="setStyle('handdrawn')">✏️ 手繪風</button>
+        <button class="tab-pill" id="style-miro" onclick="setStyle('miro')">🎨 Miro 彩色</button>
+        <select class="config-select" id="pro-theme-select" title="商務主題配色" style="width:130px;">
+          <option value="professional">🏢 商務專業</option>
+          <option value="audit">🔍 審計專用</option>
+          <option value="modern">💎 現代簡約</option>
+          <option value="classic">📋 經典標準</option>
+          <option value="blackwhite">⬛ 黑白列印</option>
+        </select>
+        <select class="config-select" id="direction-select" title="流程方向" style="width:120px;">
+          <option value="TD">⬇️ 由上至下</option>
+          <option value="LR">➡️ 由左至右</option>
+          <option value="auto">🤖 AI 判斷</option>
+        </select>
+        <label class="config-toggle" style="margin-left:auto;">
+          <input type="checkbox" id="auto-enhance" checked>
+          <span class="config-toggle-label">自動美化</span>
+        </label>
+      </div>
+
+      <!-- ④ AI 模型 + 生成 -->
+      <div class="step-row">
+        <span class="step-label">④ 模型</span>
         <button class="ai-model-btn active" id="model-gemini" onclick="setAIModel('gemini')">
-          Gemini <span class="badge badge-gemini" style="margin-left:4px;">Google</span>
+          Gemini <span class="badge badge-gemini" style="margin-left:4px;">支援圖片</span>
+        </button>
+        <button class="ai-model-btn" id="model-glm" onclick="setAIModel('glm')">
+          GLM <span class="badge badge-glm" style="margin-left:4px;">免費</span>
         </button>
         <button class="ai-model-btn" id="model-deepseek" onclick="setAIModel('deepseek')">
           DeepSeek <span class="badge badge-deepseek" style="margin-left:4px;">免費</span>
@@ -1151,75 +1254,16 @@ body {
         </button>
       </div>
 
-      <!-- Configuration Bar -->
-      <div id="config-bar">
-        <div class="config-group">
-          <span class="config-label">📐 方向</span>
-          <select class="config-select" id="direction-select">
-            <option value="TD">⬇️ 由上至下 (TD)</option>
-            <option value="LR">➡️ 由左至右 (LR)</option>
-            <option value="auto">🤖 AI 自動判斷</option>
-          </select>
-        </div>
-        <div class="config-group">
-          <span class="config-label">🏊 泳道</span>
-          <select class="config-select" id="swimlane-select">
-            <option value="auto">🤖 AI 自動偵測</option>
-            <option value="force">🏊 泳道圖 (PlantUML)</option>
-            <option value="plantuml-all">⭐ 全部用 PlantUML</option>
-            <option value="none">❌ 不啟用</option>
-          </select>
-        </div>
-        <div class="config-group">
-          <span class="config-label">🎨 專業主題</span>
-          <select class="config-select" id="pro-theme-select">
-            <option value="professional">🏢 商務專業</option>
-            <option value="audit">🔍 審計專用</option>
-            <option value="modern">💎 現代簡約</option>
-            <option value="classic">📋 經典標準</option>
-            <option value="blackwhite">⬛ 黑白列印</option>
-          </select>
-        </div>
-        <div class="config-group">
-          <span class="config-label">🔧 樣式</span>
-          <select class="config-select" id="node-style-select">
-            <option value="rounded">🔵 圓角矩形</option>
-            <option value="sharp">⬜ 直角矩形</option>
-            <option value="mixed">🎨 混合風格</option>
-          </select>
-        </div>
-        <label class="config-toggle" style="margin-left:auto;">
-          <input type="checkbox" id="auto-enhance" checked>
-          <span class="config-toggle-label">自動美化 SVG</span>
-        </label>
-      </div>
-
-      <div class="tab-row">
-        <button class="tab-pill active" id="tab-text" onclick="switchTab('text')">📝 文字輸入</button>
-        <button class="tab-pill" id="tab-pdf" onclick="switchTab('pdf')">📄 PDF 上傳</button>
-      </div>
-      <div id="text-panel">
-        <textarea id="text-input" placeholder="描述業務流程，例如：採購申請由申請人填寫PR表，部門主管審批後，超過5萬元需CFO批准，財務部收到後安排付款並完成記帳..."></textarea>
-      </div>
-      <div id="pdf-panel" class="hidden">
-        <div id="pdf-zone" onclick="document.getElementById('pdf-file').click()">
-          <span style="font-size:20px;">📄</span>
-          <span id="pdf-label">拖放 PDF 制度文件，或點擊此處上傳</span>
-        </div>
-        <input type="file" id="pdf-file" accept=".pdf" style="display:none">
-      </div>
       <div class="action-row">
         <button class="btn btn-primary" id="generate-btn" onclick="generateFlowchart()">
-          🤖 AI 生成流程圖
+          🤖 AI 生成圖表
         </button>
         <div class="action-hint">
           <span class="dot-live"></span>
-          <span id="ai-status">Gemini 3.5 Flash · 智能偵測泳道</span>
+          <span id="ai-status">Gemini 3.5 Flash · 流程圖／決策樹</span>
         </div>
       </div>
-      <div id="swimlane-notice" style="margin-top:8px; padding:8px 12px; background:var(--accent-dim); border:1px solid var(--border); border-radius:6px; font-size:11.5px; color:var(--text2); line-height:1.6; display:none;">
-        <strong style="color:var(--cyan)">💡 PlantUML 模式</strong>：此模式透過 Kroki.io 渲染，產生專業品質的流程圖。「泳道圖」強制使用欄位分隔的泳道格式；「全部用 PlantUML」讓 AI 按需決定是否加泳道。需要網路連線。
-      </div>
+      <div id="type-notice" style="margin-top:8px; padding:8px 12px; background:var(--accent-dim); border:1px solid var(--border); border-radius:6px; font-size:11.5px; color:var(--text2); line-height:1.6; display:none;"></div>
     </div>
 
     <!-- WORKSPACE -->
@@ -1298,9 +1342,12 @@ let currentZoom   = 1;
 let currentSha    = null;
 let activeTab     = 'text';
 let pdfFile       = null;
+let sketchFile    = null;   // { data: base64, mime: 'image/jpeg' }
 let currentTheme  = 'dark';
 let currentAIModel = 'gemini';
 let activeConfigTab = 'gemini';
+let currentDiagramType = 'flowchart';  // flowchart | swimlane | orgchart | sketch
+let currentStyle  = 'business';        // business | handdrawn | miro
 
 // ============================================================
 // INIT
@@ -1309,6 +1356,7 @@ document.addEventListener('DOMContentLoaded', () => {
   mermaid.initialize(getMermaidConfig(currentTheme));
   setupCodeEditor();
   setupPDFZone();
+  setupSketchZone();
   setupSplitter();
   loadConfigAndInit();
   loadFromURL();
@@ -1316,14 +1364,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupConfigBarListeners() {
-  ['direction-select', 'swimlane-select', 'pro-theme-select', 'node-style-select'].forEach(id => {
+  ['direction-select', 'pro-theme-select'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', () => {
-      // 更新泳道提示顯示
-      const swimlane = document.getElementById('swimlane-select').value;
-      const notice = document.getElementById('swimlane-notice');
-      if (notice) {
-        notice.style.display = (swimlane === 'force' || swimlane === 'plantuml-all') ? 'block' : 'none';
-      }
       const code = document.getElementById('mermaid-code').value;
       if (code.trim()) renderMermaid(code);
     });
@@ -1337,11 +1379,12 @@ function loadConfigAndInit() {
   const raw = localStorage.getItem(CONFIG_KEY);
   if (raw) { try { cfg = JSON.parse(raw); } catch { cfg = {}; } }
 
-  const hasAI = cfg.geminiKey || cfg.deepseekKey || cfg.kimiKey || cfg.doubaoKey;
+  const hasAI = cfg.geminiKey || cfg.glmKey || cfg.deepseekKey || cfg.kimiKey || cfg.doubaoKey;
 
   if (hasAI) {
     document.getElementById('config-modal').classList.add('hidden');
     if (cfg.geminiKey)   document.getElementById('cfg-gemini').value = cfg.geminiKey;
+    if (cfg.glmKey)      document.getElementById('cfg-glm').value = cfg.glmKey;
     if (cfg.deepseekKey) document.getElementById('cfg-deepseek').value = cfg.deepseekKey;
     if (cfg.kimiKey)     document.getElementById('cfg-kimi').value = cfg.kimiKey;
     if (cfg.doubaoKey)   document.getElementById('cfg-doubao').value = cfg.doubaoKey;
@@ -1356,7 +1399,7 @@ function loadConfigAndInit() {
 
 function switchConfigTab(tab) {
   activeConfigTab = tab;
-  ['gemini','deepseek','kimi','doubao'].forEach(t => {
+  ['gemini','glm','deepseek','kimi','doubao'].forEach(t => {
     document.getElementById(`cfg-tab-${t}`).classList.toggle('active', t === tab);
     document.getElementById(`cfg-panel-${t}`).classList.toggle('hidden', t !== tab);
   });
@@ -1370,18 +1413,20 @@ function skipConfig() {
 
 function saveConfig() {
   const gemini = document.getElementById('cfg-gemini').value.trim();
+  const glm = document.getElementById('cfg-glm').value.trim();
   const deepseek = document.getElementById('cfg-deepseek').value.trim();
   const kimi = document.getElementById('cfg-kimi').value.trim();
   const doubao = document.getElementById('cfg-doubao').value.trim();
   const token = document.getElementById('cfg-token').value.trim();
   const repo = document.getElementById('cfg-repo').value.trim();
 
-  const hasAI = gemini || deepseek || kimi || doubao;
+  const hasAI = gemini || glm || deepseek || kimi || doubao;
   if (!hasAI) { toast('請至少配置一個 AI 模型 API Key', 'error'); return; }
 
   // 欄位已預填現有值，空欄位代表用戶清除該項
   cfg = {
     geminiKey: gemini,
+    glmKey: glm,
     deepseekKey: deepseek,
     kimiKey: kimi,
     doubaoKey: doubao,
@@ -1396,6 +1441,7 @@ function saveConfig() {
 
 function showConfig() {
   document.getElementById('cfg-gemini').value = cfg.geminiKey || '';
+  document.getElementById('cfg-glm').value = cfg.glmKey || '';
   document.getElementById('cfg-deepseek').value = cfg.deepseekKey || '';
   document.getElementById('cfg-kimi').value = cfg.kimiKey || '';
   document.getElementById('cfg-doubao').value = cfg.doubaoKey || '';
@@ -1407,18 +1453,78 @@ function showConfig() {
 // ============================================================
 // AI MODEL SELECTION
 // ============================================================
+const AI_MODELS = ['gemini', 'glm', 'deepseek', 'kimi', 'doubao'];
+const VISION_MODELS = ['gemini'];  // 支援圖片輸入的模型
+
 function setAIModel(model) {
   currentAIModel = model;
-  ['gemini','deepseek','kimi','doubao'].forEach(m => {
+  AI_MODELS.forEach(m => {
     document.getElementById(`model-${m}`).classList.toggle('active', m === model);
   });
-  const statusMap = {
-    gemini: 'Gemini 3.5 Flash · 智能偵測泳道',
-    deepseek: 'DeepSeek V3 · 邏輯推理強',
-    kimi: 'Kimi K2.6 · 長文本處理',
-    doubao: '豆包 Pro · 中文理解佳',
+  updateAIStatus();
+}
+
+function updateAIStatus() {
+  const modelMap = {
+    gemini: 'Gemini 3.5 Flash', glm: 'GLM-4.7 Flash',
+    deepseek: 'DeepSeek V3', kimi: 'Kimi', doubao: '豆包 Pro',
   };
-  document.getElementById('ai-status').textContent = statusMap[model];
+  const typeMap = {
+    flowchart: '流程圖／決策樹', swimlane: '泳道圖 (PlantUML)',
+    orgchart: '組織架構圖', sketch: '草圖整理',
+  };
+  document.getElementById('ai-status').textContent =
+    `${modelMap[currentAIModel] || currentAIModel} · ${typeMap[currentDiagramType] || ''}`;
+}
+
+// ============================================================
+// DIAGRAM TYPE & STYLE SELECTION
+// ============================================================
+function setDiagramType(type) {
+  currentDiagramType = type;
+  ['flowchart', 'swimlane', 'orgchart', 'sketch'].forEach(t => {
+    document.getElementById(`type-${t}`).classList.toggle('active', t === type);
+  });
+  const notice = document.getElementById('type-notice');
+  if (type === 'swimlane') {
+    notice.innerHTML = '<strong style="color:var(--cyan)">💡 泳道圖</strong>：使用 PlantUML 活動圖（Kroki.io 渲染），產生帶垂直分隔線的真正泳道。需要網路連線。';
+    notice.style.display = 'block';
+  } else if (type === 'sketch') {
+    notice.innerHTML = '<strong style="color:var(--cyan)">💡 草圖整理</strong>：上傳手繪流程圖照片，AI 識別後整理成整齊的圖表。僅 Gemini 支援圖片輸入。預設保持手繪風格，可在「③ 風格」切換成正式風格。';
+    notice.style.display = 'block';
+    switchTab('sketch');
+    if (!VISION_MODELS.includes(currentAIModel)) setAIModel('gemini');
+    if (currentStyle === 'business') setStyle('handdrawn');
+  } else {
+    notice.style.display = 'none';
+  }
+  updateAIStatus();
+}
+
+function setStyle(style) {
+  currentStyle = style;
+  ['business', 'handdrawn', 'miro'].forEach(s => {
+    document.getElementById(`style-${s}`).classList.toggle('active', s === style);
+  });
+  // 商務主題配色只在商務風格下有意義
+  document.getElementById('pro-theme-select').style.display = style === 'business' ? '' : 'none';
+  mermaid.initialize(getMermaidConfig(currentTheme));
+  applyPreviewBackground();
+  const code = document.getElementById('mermaid-code').value;
+  if (code.trim()) renderMermaid(code);
+}
+
+function applyPreviewBackground() {
+  const preview = document.getElementById('preview-output');
+  if (currentStyle === 'handdrawn' || currentStyle === 'miro') {
+    preview.style.background = '#fbfbf8';  // 手繪/Miro 風格用淺色紙面
+  } else if (currentTheme === 'dark') {
+    preview.style.background = '';
+  } else if (currentTheme === 'bw' || currentTheme === 'blackwhite') {
+    preview.style.background = '#ffffff';
+  } else {
+    preview.style.background = '#f8fafc';
+  }
 }
 
 // ============================================================
@@ -1518,7 +1624,7 @@ function renderHistoryList() {
 }
 
 function getModelLabel(model) {
-  const map = { gemini: 'Gemini', deepseek: 'DeepSeek', kimi: 'Kimi', doubao: '豆包' };
+  const map = { gemini: 'Gemini', glm: 'GLM', deepseek: 'DeepSeek', kimi: 'Kimi', doubao: '豆包' };
   return map[model] || model;
 }
 
@@ -1532,9 +1638,9 @@ function loadFlowchart(id) {
   if (fc.inputText) document.getElementById('text-input').value = fc.inputText;
   if (fc.settings) {
     if (fc.settings.direction) document.getElementById('direction-select').value = fc.settings.direction;
-    if (fc.settings.swimlane) document.getElementById('swimlane-select').value = fc.settings.swimlane;
     if (fc.settings.proTheme) document.getElementById('pro-theme-select').value = fc.settings.proTheme;
-    if (fc.settings.nodeStyle) document.getElementById('node-style-select').value = fc.settings.nodeStyle;
+    if (fc.settings.diagramType) setDiagramType(fc.settings.diagramType);
+    if (fc.settings.style) setStyle(fc.settings.style);
   }
   const code = fc.mermaidCode || '';
   document.getElementById('mermaid-code').value = code;
@@ -1551,6 +1657,7 @@ function newDiagram() {
   document.getElementById('preview-output').innerHTML = emptyStateHTML();
   pdfFile = null;
   resetPdfZone();
+  resetSketchZone();
   renderHistoryList();
   currentZoom = 1;
 }
@@ -1570,12 +1677,7 @@ async function saveDiagram() {
   try {
     const { sha } = await githubGet();
     const now = new Date().toISOString();
-    const settings = {
-      direction: document.getElementById('direction-select').value,
-      swimlane: document.getElementById('swimlane-select').value,
-      proTheme: document.getElementById('pro-theme-select').value,
-      nodeStyle: document.getElementById('node-style-select').value,
-    };
+    const settings = getUserSettings();
 
     if (currentId) {
       const idx = flowcharts.findIndex(f => f.id === currentId);
@@ -1631,6 +1733,9 @@ async function generateFlowchart() {
     const text = document.getElementById('text-input').value.trim();
     if (!text) { toast('請輸入流程描述', 'error'); return; }
     await callAI({ text });
+  } else if (activeTab === 'sketch') {
+    if (!sketchFile) { toast('請先上傳手繪草圖圖片', 'error'); return; }
+    await callAI({ image: sketchFile.data, imageMime: sketchFile.mime });
   } else {
     if (!pdfFile) { toast('請先上傳 PDF 文件', 'error'); return; }
     const base64 = await toBase64(pdfFile);
@@ -1639,22 +1744,44 @@ async function generateFlowchart() {
 }
 
 function getUserSettings() {
-  const swimlane = document.getElementById('swimlane-select').value;
-  const notice = document.getElementById('swimlane-notice');
-  if (notice) {
-    notice.style.display = (swimlane === 'force' || swimlane === 'auto') ? 'block' : 'none';
-  }
   return {
     direction: document.getElementById('direction-select').value,
-    swimlane: swimlane,
+    diagramType: currentDiagramType,
+    style: currentStyle,
     proTheme: document.getElementById('pro-theme-select').value,
-    nodeStyle: document.getElementById('node-style-select').value,
   };
 }
 
-function buildPlantUMLSwimlanePrompt(proTheme, requireSwimlane = true) {
-  const isBlackWhite = proTheme === 'blackwhite';
-  const skinparams = isBlackWhite ? `skinparam swimlaneWidth 220
+function buildPlantUMLSwimlanePrompt(proTheme, style = 'business') {
+  let skinparams;
+  if (style === 'handdrawn') {
+    skinparams = `skinparam swimlaneWidth 220
+skinparam handwritten true
+skinparam backgroundColor #fbfbf8
+skinparam defaultFontName "Segoe Print"
+skinparam swimlaneBorderColor #5c544a
+skinparam swimlaneTitleFontColor #2d2a26
+skinparam activityBackgroundColor #fdf6e3
+skinparam activityBorderColor #5c544a
+skinparam activityFontColor #2d2a26
+skinparam arrowColor #4a453d
+skinparam activityDiamondBackgroundColor #f5efdc
+skinparam activityDiamondBorderColor #8a8272
+skinparam activityDiamondFontColor #2d2a26`;
+  } else if (style === 'miro') {
+    skinparams = `skinparam swimlaneWidth 220
+skinparam backgroundColor #ffffff
+skinparam swimlaneBorderColor #c4c4c0
+skinparam swimlaneTitleFontColor #1a1a1a
+skinparam activityBackgroundColor #FFF9B1
+skinparam activityBorderColor #E3D64B
+skinparam activityFontColor #1a1a1a
+skinparam arrowColor #3d3d3d
+skinparam activityDiamondBackgroundColor #FFCEE0
+skinparam activityDiamondBorderColor #E8A3BE
+skinparam activityDiamondFontColor #1a1a1a`;
+  } else if (proTheme === 'blackwhite') {
+    skinparams = `skinparam swimlaneWidth 220
 skinparam backgroundColor #ffffff
 skinparam swimlaneBorderColor #000000
 skinparam swimlaneTitleFontColor #000000
@@ -1664,7 +1791,9 @@ skinparam activityFontColor #000000
 skinparam arrowColor #000000
 skinparam activityDiamondBackgroundColor #ffffff
 skinparam activityDiamondBorderColor #000000
-skinparam activityDiamondFontColor #000000` : `skinparam swimlaneWidth 220
+skinparam activityDiamondFontColor #000000`;
+  } else {
+    skinparams = `skinparam swimlaneWidth 220
 skinparam backgroundColor #0c0f1a
 skinparam swimlaneBorderColor #263050
 skinparam swimlaneTitleFontColor #dce7f7
@@ -1675,9 +1804,8 @@ skinparam arrowColor #60a5fa
 skinparam activityDiamondBackgroundColor #78350f
 skinparam activityDiamondBorderColor #fbbf24
 skinparam activityDiamondFontColor #fef3c7`;
-  const swimlaneRule = requireSwimlane
-    ? '4. 必須使用泳道（swimlane）格式，每個部門/角色用 |部門名稱| 標示'
-    : '4. 根據流程複雜度決定是否使用泳道。如流程涉及多個部門，使用 |部門名稱| 劃分泳道；否則直接輸出線性活動圖';
+  }
+  const swimlaneRule = '4. 必須使用泳道（swimlane）格式，每個部門/角色用 |部門名稱| 標示';
 
   return `你是資深業務流程分析師，請將業務流程轉換為 PlantUML 活動圖。
 
@@ -1725,9 +1853,7 @@ stop
 }
 
 function buildSystemPrompt(settings) {
-  const direction = settings.direction === 'auto' ? 'LR（泳道圖必須使用 LR 方向，subgraph 從左到右排列成泳道）' : settings.direction;
-  const swimlane = settings.swimlane === 'auto' ? '涉及2個或以上部門/角色時自動使用 subgraph 劃分泳道' :
-                   settings.swimlane === 'force' ? '強制使用 subgraph 劃分泳道，即使只有一個部門也建立泳道' : '不使用泳道';
+  const direction = settings.direction === 'auto' ? '由 AI 根據流程複雜度選擇（步驟多而分支少用 TD，橫向階段明顯用 LR）' : settings.direction;
 
   const themeColors = {
     professional: {
@@ -1768,247 +1894,138 @@ function buildSystemPrompt(settings) {
   };
 
   const colors = themeColors[settings.proTheme] || themeColors.professional;
-  const nodeShapes = {
-    rounded: '開始/結束用圓角矩形 `id([文字])`，流程步驟用矩形 `id[文字]`，判定用菱形 `id{文字}`，文檔用 `id[/文字/]`',
-    sharp: '開始/結束用圓角矩形 `id([文字])`，流程步驟用矩形 `id[文字]`（直角），判定用菱形 `id{文字}`，文檔用 `id[/文字/]`',
-    mixed: '開始/結束用圓角矩形 `id([文字])`，核心流程用矩形 `id[文字]`，子流程用雙邊矩形 `id[[文字]]`，判定用菱形 `id{文字}`，文檔用 `id[/文字/]`',
-  };
+  const { diagramType, style } = settings;
 
-  return `你是資深業務流程分析師及內部審計專家，專長將業務制度轉換為清晰、專業的 Mermaid.js 流程圖。
+  const COMMON_RULES = `【輸出規則 — 必須嚴格遵守】
+1. 只輸出純 Mermaid 代碼，不要任何說明文字、標題或 markdown 代碼塊符號（不要 \`\`\`）
+2. 第一行必須是 flowchart 方向宣告（如 flowchart TD），禁止加入 %%{init}%% 指令或任何前置文字
+3. 所有節點文字、條件標籤必須使用繁體中文
+4. 節點 ID 只用英文字母或數字（如 A、B1、step1），不可用中文
+5. 禁止用保留字作節點 ID：end、graph、flowchart、style、classDef、click、subgraph、direction
+6. 節點標籤文字內禁止半形圓括號 ( )，需要時改用全形括號（）或方括號〔〕`;
 
-【輸出規則 — 必須嚴格遵守】
-1. 只輸出純 Mermaid 代碼，不要有任何說明文字、標題或 markdown 代碼塊符號（不要 \`\`\`）
-2. 第一行必須是 Mermaid 方向宣告（例如 flowchart TD），不可有任何前置文字
-3. 所有節點文字、條件標籤、subgraph 標題必須使用繁體中文
-4. 節點 ID 只用英文字母或數字（如 A、B1、step1），不可用中文或保留字
-5. 禁止使用以下 Mermaid 保留字作為節點 ID：end、graph、flowchart、style、classDef、click
-   ⚠️ 注意：subgraph 和 direction 是 Mermaid 關鍵字，只能用作 subgraph 區塊和方向宣告，不能作為節點 ID
-6. 節點標籤文字內禁止使用半形圓括號 ( )，如需標注縮寫請改用全形括號（）或方括號〔〕
-
-【方向設定】
-• 流程方向：${direction}
-
-【泳道設定】
-• ${swimlane}
-
-【泳道 subgraph 語法規範 — 必須嚴格遵守】
-⚠️ 重要：Mermaid.js 的 subgraph 不是真正的泳道（Swimlane），它無法繪製垂直分隔線。
-但通過正確的語法，可以模擬出類似泳道的效果：每個 subgraph 是一個「區塊」，從左到右排列。
-
-【目標效果】
-參考標準泳道圖（如 ProcessOn 範例）：
-- 每個部門/角色佔一欄（垂直方向）
-- 節點在欄內垂直排列（由上至下）
-- 跨欄的連線水平連接
-- 欄頂部有部門名稱標題
-
-【Mermaid 實現策略 — Subgraph 模擬泳道】
-由於 Mermaid subgraph 的限制，使用以下策略：
-
-1. 主方向必須是 flowchart LR（subgraph 從左到右排列）
-2. 每個 subgraph 代表一個「泳道欄」
-3. subgraph 內部使用 direction TB（節點垂直排列）
-4. ⚠️ 關鍵：所有連線（包括 subgraph 內部節點之間的連線）必須放在 subgraph 外部！
-   這是避免 direction TB 被覆蓋的唯一方法。
-
-【正確語法結構】
-flowchart LR
-  %% 定義 classDef（在主方向宣告後）
-  classDef startEnd fill:#...,stroke:#...,...
-  classDef process fill:#...,stroke:#...,...
-
-  %% 定義 subgraph（泳道欄）— 只放節點定義, 不放連線
-  subgraph 招聘專員["👤 招聘專員"]
-    direction TB
-    A[篩選簡歷]
-    B[通過初篩簡歷]
-    C[與候選人預約面試時間]
-    D[與面試官確認面試時間]
-  end
-  subgraph 業務主管["👔 業務主管"]
-    direction TB
-    E[篩選簡歷]
-    F[需要約定面試履歷]
-    G[面試]
-    H{是否通過}
-  end
-  subgraph 人力資源主管["💼 人力資源主管"]
-    direction TB
-    I[人資面試]
-    J{是否通過}
-    K[談薪資及相關制度]
-    L{是否達成共識}
-    M([通知入職])
-    N([回覆候選人])
-  end
-
-  %% 所有連線放在 subgraph 外部
-  A --> B
-  B --> C
-  C --> D
-  E --> F
-  F --> G
-  G --> H
-  I --> J
-  J --> K
-  K --> L
-  L --> M
-  B --> E
-  D --> G
-  H -- 通過 --> I
-  H -- 未通過 --> N
-  J -- 通過 --> K
-  L -- 否 --> N
-
-  %% 套用樣式
-  class A,M,N startEnd
-  class B,C,D,E,F,G,I,K process
-  class H,J,L decision
-
-【關鍵規則】
-1. subgraph 內部只能有節點定義（A[文字]）, 絕對不能有連線（-->）
-2. 所有連線必須在 subgraph 外部
-3. 每個 subgraph 必須有明確標題：subgraph 名稱["🏢 部門名稱"]
-4. 主方向 flowchart LR, subgraph 內部 direction TB
-5. 泳道數量建議 2-5 個, 過多會導致圖表過寬
-6. 節點 ID 只用英文/數字, 文字用繁體中文
-
-【常見錯誤 — 絕對避免】
-❌ 錯誤：subgraph 內部放連線
-  subgraph 部門A
-    A --> B  ← 這會導致 direction TB 被覆蓋！
-  end
-
-✅ 正確：連線全部放在外部
-  subgraph 部門A
-    A[步驟A]
-    B[步驟B]
-  end
-  A --> B  ← 連線在外部
-
-【替代方案：如果 Mermaid 泳道效果不佳】
-如果生成的泳道圖比例嚴重失衡或無法閱讀，請：
-1. 改用「不使用泳道」選項，生成標準流程圖
-2. 或使用 Visio、ProcessOn、Draw.io 等專業工具繪製泳道圖
-3. 或將 Mermaid 生成的 SVG 導入到 Draw.io 中手動調整布局
-
-【節點形狀規範】
-【黑白主題 classDef 範例】
-當用戶選擇黑白主題時，使用以下 classDef：
-  classDef startEnd fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600
-  classDef process fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000
-  classDef decision fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,font-weight:600
-  classDef docNode fill:#ffffff,stroke:#000000,stroke-width:1.5px,color:#000000
-
-【泳道布局最佳實踐】
-1. 主方向使用 flowchart LR（由左至右），subgraph 從左到右排列成泳道
-2. 每個 subgraph（泳道）內部使用 direction TB，節點在泳道內垂直排列
-3. 跨泳道連線在 subgraph 外部定義
-4. 泳道排列順序由 subgraph 定義順序決定（從左到右）
-5. 為了獲得最佳泳道效果：
-   - 每個泳道使用 subgraph 定義，標題用繁體中文部門名稱
-   - 泳道內部節點垂直排列（direction TB）
-   - 跨泳道連線在 subgraph 外部定義
-   - 使用 classDef 為不同類型節點設置樣式
-6. 參考範例結構：
-   flowchart LR
-     subgraph 部門A["🏢 部門A"]
-       direction TB
-       A[步驟1]
-       B[步驟2]
-     end
-     subgraph 部門B["🏢 部門B"]
-       direction TB
-       C[步驟3]
-       D[步驟4]
-     end
-     A --> B
-     B --> C
-     C --> D
-     D --> E([結束])
-
-【標準流程圖符號規範 — 嚴格遵循】
-根據業界標準流程圖符號（參考 ISO 5807 / GB/T 1526）：
-• 開始/結束：圓角矩形（Stadium） 語法：id([文字])
-• 流程/步驟：矩形               語法：id[文字]
-• 判定/決策：菱形               語法：id{文字}
-• 文檔/表單：文檔形狀            語法：id[/文字/]
-• 子流程：雙邊矩形              語法：id[[文字]]
-• 數據庫/存儲：圓柱體           語法：id[(文字)]
-• 跨頁引用/連接：圓形           語法：id((文字))
-• 手動輸入：梯形               語法：id[/文字\] 或 id[\文字/]
-
-【連線規範】
-• 正常流程：--> 或 --->
-• 帶條件標籤：-- 條件文字 -->
-• 重要決策分支：明確標示「是/否」、「通過/未通過」、「批准/退回」等
-• 返回/循環：使用虛線或註釋標示
-
-【節點形狀規範】
-• ${nodeShapes[settings.nodeStyle] || nodeShapes.rounded}
-• 條件判斷：使用菱形 \`id{Text}\`
-• 文件/表單：使用平行四邊形 \`id[/Text/]\` 或文檔形狀 \`id[/Text/]\`
-• 外部系統/數據庫：使用圓柱體 \`id[(Text)]\`
-• 開始/結束節點：\`id([開始])\` 和 \`id([結束])\`
-
-【專業主題樣式 — 必須加入以下 classDef 並為每個節點套用對應 class】
-在 flowchart 宣告後立即加入：
+  const styleBlock = style === 'business'
+    ? `【專業主題樣式 — 必須加入 classDef 並為每個節點套用 class】
+在方向宣告後立即加入：
   classDef startEnd ${colors.startEnd}
   classDef process  ${colors.process}
   classDef decision ${colors.decision}
   classDef docNode  ${colors.docNode}
-  classDef sysNode  ${colors.sysNode}
-並在所有節點定義後，用 class 指令套用（⚠️ 每個 class 只定義一次，禁止重複）：
-  class <開始節點ID>,<結束節點ID> startEnd
+節點定義完畢後用 class 指令套用：
+  class <開始/結束節點ID> startEnd
   class <步驟節點ID列表> process
   class <決策節點ID列表> decision
   class <文件節點ID列表> docNode
-  class <系統節點ID列表> sysNode
+【class 語法規則】逗號後不可有空格（正確：class P1,P2 process）；每個節點只能屬於一個 class；同一組合不可重複定義`
+    : `【樣式規則】不要加入任何 classDef、class、style 或 linkStyle 指令，輸出純結構代碼即可（渲染器會自動套用${style === 'handdrawn' ? '手繪' : 'Miro 彩色便利貼'}風格）`;
 
-【class 語法規則】
-• 正確：class P1,P2,P3 process
-• 錯誤：class P1, P2, P3 process（逗號後不能有空格）
-• 錯誤：重複定義同一個 class（如先 class P1 startEnd 後又 class P1 process）
-• 每個節點 ID 只能屬於一個 class
+  // ===== 組織架構圖 =====
+  if (diagramType === 'orgchart') {
+    return `你是資深組織設計顧問，專長將組織描述轉換為清晰的 Mermaid.js 組織架構圖。
 
-【線條美化】
-• 強制使用平滑曲線：在 init 中加入 'flowchart': { 'curve': 'basis' }
-• 連線標籤：重要條件用 -- 條件 --> 標示
-• 審批節點：明確標示通過／拒絕兩條分支
+${COMMON_RULES}
 
-【Mermaid init 設定 — 必須放在代碼最上方】
-%%{init: {'theme': 'neutral', 'themeVariables': { 'primaryColor': '#F4F5F7', 'edgeColor': '#4A5568', 'lineColor': '#4A5568'}, 'flowchart': { 'curve': 'basis', 'padding': 24, 'nodeSpacing': 50, 'rankSpacing': 70, 'subgraphMargin': 20, 'useMaxWidth': true }}}%%
+【組織架構圖規範】
+1. 必須使用 flowchart TD（由上至下），頂層是最高職位/單位
+2. 全部使用矩形節點 id[名稱]，不使用菱形或其他形狀
+3. 上下級用實線連接：上級 --> 下級
+4. 同級單位在同一層，虛線 -.- 可表示協作/匯報關係（少用）
+5. 職位加部門可寫成兩行：id[部門名稱<br>負責人職稱]
+6. 層級不超過 5 層，同層單位過多時可合理分組
 
-【泳道圖專用 init 設定】
-當生成泳道圖時，使用以下 init 設定：
-%%{init: {'theme': 'neutral', 'flowchart': { 'curve': 'basis', 'padding': 24, 'nodeSpacing': 50, 'rankSpacing': 70, 'subgraphMargin': 20, 'useMaxWidth': true }}}%%
-注意：Mermaid 沒有真正的泳道功能，subgraph 只是從左到右排列的區塊。
+【範例結構】
+flowchart TD
+  CEO[總經理]
+  OPS[營運部]
+  FIN[財務部]
+  HR[人力資源部]
+  CEO --> OPS
+  CEO --> FIN
+  CEO --> HR
+  OPS --> PUR[採購組]
+  OPS --> WH[倉務組]
+
+${styleBlock}
+
+【輸出前自我檢查】層級關係是否與描述一致、有無遺漏單位、代碼可否運行`;
+  }
+
+  // ===== 草圖整理 =====
+  if (diagramType === 'sketch') {
+    return `你是圖表數位化專家，專長將手繪流程圖照片忠實轉換為 Mermaid.js 代碼。
+
+${COMMON_RULES}
+
+【草圖識別規範 — 忠實還原優先】
+1. 仔細識別圖片中所有節點、文字、箭頭方向和連線標籤
+2. 保持原圖的結構和邏輯，不要自行增減步驟或改寫流程
+3. 手寫文字模糊時，按上下文推斷最合理的繁體中文寫法
+4. 形狀對應：橢圓/圓角框→([文字])、矩形→[文字]、菱形→{文字}、平行四邊形→[/文字/]、圓柱→[(文字)]
+5. 原圖大致由上至下就用 flowchart TD，由左至右就用 flowchart LR
+6. 箭頭上的文字（如 是/否）用 -- 標籤 --> 保留
+7. 無法辨認的節點，文字寫〔無法辨認〕讓用戶修正
+
+${styleBlock}
+
+【輸出前自我檢查】節點數量是否與原圖一致、連線方向有無錯誤、代碼可否運行`;
+  }
+
+  // ===== 流程圖／決策樹（預設）=====
+  return `你是資深業務流程分析師及內部審計專家，專長將業務制度轉換為清晰、專業的 Mermaid.js 流程圖。
+
+${COMMON_RULES}
+
+【方向設定】
+• 流程方向：${direction}
+
+【標準流程圖符號規範 — 嚴格遵循 ISO 5807】
+• 開始/結束：圓角矩形 id([文字])
+• 流程/步驟：矩形 id[文字]
+• 判定/決策：菱形 id{文字}
+• 文檔/表單：id[/文字/]
+• 子流程：id[[文字]]
+• 數據庫/系統：id[(文字)]
+
+【連線規範】
+• 正常流程：-->
+• 帶條件標籤：-- 條件文字 -->（決策分支必須標示 是/否、通過/退回 等）
+• 返回/重做循環：用虛線 -.->
+
+${styleBlock}
 
 【審計專用要求】
-• 標示關鍵控制點（KCP）節點
-• 標示風險點（RISK）節點
-• 涉及審批的節點標示授權級別
+• 涉及審批的節點標示授權級別（如有）
 • 文件傳遞節點標示表單編號（如有）
-• 確保代碼語法正確、完整可運行`;
+• 關鍵控制點可在文字中標注〔KCP〕
+
+【輸出前自我檢查】所有分支是否都有終點、決策分支是否都有標籤、代碼可否運行`;
 }
 
-async function callAI({ text, pdf }) {
+async function callAI({ text, pdf, image, imageMime }) {
+  // 圖片/PDF 輸入需要視覺能力，僅 Gemini 支援
+  if ((image || pdf) && !VISION_MODELS.includes(currentAIModel)) {
+    setAIModel('gemini');
+    toast('圖片/PDF 輸入僅 Gemini 支援，已自動切換', 'info');
+  }
+
   setStatus('調用 AI...', true);
-  showLoading('AI 正在分析業務流程...');
+  showLoading(image ? 'AI 正在識別手繪草圖...' : 'AI 正在分析業務流程...');
 
   const settings = getUserSettings();
-  const usePlantUML = settings.swimlane === 'force' || settings.swimlane === 'plantuml-all';
-  const plantUMLSwimlane = settings.swimlane === 'force';
-  const systemPrompt = usePlantUML ? buildPlantUMLSwimlanePrompt(settings.proTheme, plantUMLSwimlane) : buildSystemPrompt(settings);
+  const usePlantUML = settings.diagramType === 'swimlane';
+  const systemPrompt = usePlantUML
+    ? buildPlantUMLSwimlanePrompt(settings.proTheme, settings.style)
+    : buildSystemPrompt(settings);
 
   try {
     let result;
     switch (currentAIModel) {
-      case 'gemini': result = await callGemini(systemPrompt, text, pdf); break;
+      case 'gemini': result = await callGemini(systemPrompt, text, pdf, image, imageMime); break;
+      case 'glm': result = await callGLM(systemPrompt, text, pdf); break;
       case 'deepseek': result = await callDeepSeek(systemPrompt, text, pdf); break;
       case 'kimi': result = await callKimi(systemPrompt, text, pdf); break;
       case 'doubao': result = await callDoubao(systemPrompt, text, pdf); break;
-      default: result = await callGemini(systemPrompt, text, pdf);
+      default: result = await callGemini(systemPrompt, text, pdf, image, imageMime);
     }
 
     const raw = result.text;
@@ -2022,7 +2039,7 @@ async function callAI({ text, pdf }) {
       autoTitle(code, text);
     }
 
-    toast(`流程圖生成成功 ✓（${modelUsed}）`, 'success');
+    toast(`圖表生成成功 ✓（${modelUsed}）`, 'success');
     setStatus('生成完成', false);
   } catch(e) {
     toast('生成失敗：' + e.message, 'error');
@@ -2036,15 +2053,23 @@ async function callAI({ text, pdf }) {
 // ============================================================
 // GEMINI API
 // ============================================================
-async function callGemini(systemPrompt, text, pdf) {
-  const parts = pdf
-    ? [
-        { inline_data: { mime_type: 'application/pdf', data: pdf } },
-        { text: systemPrompt + '\n\n請分析以上 PDF 文件中的業務流程，生成完整流程圖。' },
-      ]
-    : [
-        { text: systemPrompt + '\n\n【業務流程描述】\n' + text },
-      ];
+async function callGemini(systemPrompt, text, pdf, image, imageMime) {
+  let parts;
+  if (image) {
+    parts = [
+      { inline_data: { mime_type: imageMime || 'image/jpeg', data: image } },
+      { text: systemPrompt + '\n\n請識別以上手繪草圖，轉換成對應的圖表代碼。' },
+    ];
+  } else if (pdf) {
+    parts = [
+      { inline_data: { mime_type: 'application/pdf', data: pdf } },
+      { text: systemPrompt + '\n\n請分析以上 PDF 文件中的業務流程，生成完整流程圖。' },
+    ];
+  } else {
+    parts = [
+      { text: systemPrompt + '\n\n【業務流程描述】\n' + text },
+    ];
+  }
 
   const models = ['gemini-3.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash'];
   let lastErr;
@@ -2081,6 +2106,47 @@ async function callGemini(systemPrompt, text, pdf) {
   throw new Error(lastErr?.quota
     ? `所有 Gemini 模型配額已用盡 ${retrySec}｜請稍後再試`
     : `所有 Gemini 模型均不可用｜${lastErr?.msg || '請檢查 API Key'}`);
+}
+
+// ============================================================
+// GLM (智譜) API — OpenAI 相容格式
+// ============================================================
+async function callGLM(systemPrompt, text, pdf) {
+  if (pdf) throw new Error('GLM 暫不支援 PDF 上傳，請使用文字輸入');
+  if (!cfg.glmKey) throw new Error('請先在設定中配置 GLM API Key');
+
+  const models = ['glm-4.7-flash', 'glm-4-flash'];
+  let lastErr;
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const res = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${cfg.glmKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text }
+        ],
+        temperature: 0.3,
+        max_tokens: 4096,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) {
+      const msg = data.error?.message || `GLM ${res.status}`;
+      // 模型 ID 不存在時嘗試備用型號
+      const modelMissing = res.status === 404 || /model|不存在|invalid/i.test(msg);
+      lastErr = msg;
+      if (modelMissing && i < models.length - 1) continue;
+      throw new Error(msg);
+    }
+    return { text: data.choices?.[0]?.message?.content || '', model };
+  }
+  throw new Error(lastErr || 'GLM 調用失敗');
 }
 
 // ============================================================
@@ -2377,7 +2443,9 @@ async function renderMermaid(code) {
       }
 
       if (document.getElementById('auto-enhance').checked) {
-        if (currentTheme === 'dark') enhanceMermaidSVG(svgEl);
+        if (currentStyle === 'miro') enhanceMermaidSVGMiro(svgEl);
+        else if (currentStyle === 'handdrawn') { /* handDrawn look 由 Mermaid 原生處理，不加濾鏡 */ }
+        else if (currentTheme === 'dark') enhanceMermaidSVG(svgEl);
         else enhanceMermaidSVGLight(svgEl);
       }
       setupNodeEditing(svgEl);
@@ -2585,6 +2653,43 @@ function enhanceMermaidSVGLight(svg) {
     .edgePath path { stroke-width: 2px !important; }
     .nodeLabel, .label { font-weight: 500 !important; }
     .cluster rect { filter: drop-shadow(0 3px 10px rgba(0,0,0,0.1)); }
+  `;
+  svg.insertBefore(style, svg.firstChild);
+}
+
+// Miro 彩色風格：便利貼配色（矩形黃、菱形粉紅、圓角綠、圓柱藍）
+function enhanceMermaidSVGMiro(svg) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const style = document.createElementNS(NS, 'style');
+  style.textContent = `
+    .node rect {
+      fill: #FFF9B1 !important; stroke: #E3D64B !important; stroke-width: 1.5px !important;
+      filter: drop-shadow(2px 3px 5px rgba(0,0,0,0.18));
+    }
+    .node polygon {
+      fill: #FFCEE0 !important; stroke: #E8A3BE !important; stroke-width: 1.5px !important;
+      filter: drop-shadow(2px 3px 5px rgba(0,0,0,0.18));
+    }
+    .node circle, .node path {
+      fill: #D5F692 !important; stroke: #A8CC5E !important; stroke-width: 1.5px !important;
+      filter: drop-shadow(2px 3px 5px rgba(0,0,0,0.18));
+    }
+    .node .cylinder, .node ellipse {
+      fill: #A6CCF5 !important; stroke: #6FA8DC !important;
+    }
+    .cluster rect {
+      fill: #F7F7F5 !important; stroke: #c4c4c0 !important; stroke-width: 1px !important;
+      stroke-dasharray: none !important;
+    }
+    .edgePath path { stroke: #3d3d3d !important; stroke-width: 2px !important; }
+    marker path { fill: #3d3d3d !important; }
+    .edgeLabel foreignObject div {
+      background: #ffffff !important; border: 1px solid #d0d0cc !important;
+      border-radius: 4px !important; padding: 1px 6px !important;
+      font-size: 11px !important; font-weight: 600 !important; color: #1a1a1a !important;
+    }
+    .nodeLabel, .label { font-weight: 600 !important; color: #1a1a1a !important; }
+    .cluster-label { font-weight: 700 !important; color: #1a1a1a !important; }
   `;
   svg.insertBefore(style, svg.firstChild);
 }
@@ -2825,14 +2930,65 @@ function resetPdfZone() {
 }
 
 // ============================================================
+// SKETCH IMAGE UPLOAD（手繪草圖）
+// ============================================================
+function setupSketchZone() {
+  const zone = document.getElementById('sketch-zone');
+  const input = document.getElementById('sketch-file');
+  const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
+
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && ACCEPTED.includes(f.type)) setSketchFile(f);
+    else toast('請上傳 JPG / PNG / WebP 圖片', 'error');
+  });
+
+  input.addEventListener('change', () => {
+    if (input.files[0]) setSketchFile(input.files[0]);
+  });
+}
+
+async function setSketchFile(file) {
+  if (file.size > 8 * 1024 * 1024) { toast('圖片過大（上限 8MB），請壓縮後再試', 'error'); return; }
+  const data = await toBase64(file);
+  sketchFile = { data, mime: file.type };
+  const zone = document.getElementById('sketch-zone');
+  const label = document.getElementById('sketch-label');
+  const preview = document.getElementById('sketch-preview');
+  zone.classList.add('has-file');
+  label.textContent = `✓ ${file.name} （${(file.size / 1024).toFixed(0)} KB）`;
+  preview.src = `data:${file.type};base64,${data}`;
+  preview.classList.remove('hidden');
+  // 上傳圖片時自動切換到支援視覺的模型
+  if (!VISION_MODELS.includes(currentAIModel)) {
+    setAIModel('gemini');
+    toast('圖片輸入僅 Gemini 支援，已自動切換', 'info');
+  }
+}
+
+function resetSketchZone() {
+  sketchFile = null;
+  document.getElementById('sketch-zone').classList.remove('has-file');
+  document.getElementById('sketch-label').textContent = '拖放手繪草圖（JPG / PNG），或點擊此處上傳';
+  const preview = document.getElementById('sketch-preview');
+  preview.src = '';
+  preview.classList.add('hidden');
+  document.getElementById('sketch-file').value = '';
+}
+
+// ============================================================
 // TABS
 // ============================================================
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById('tab-text').classList.toggle('active', tab === 'text');
-  document.getElementById('tab-pdf').classList.toggle('active', tab === 'pdf');
-  document.getElementById('text-panel').classList.toggle('hidden', tab !== 'text');
-  document.getElementById('pdf-panel').classList.toggle('hidden', tab !== 'pdf');
+  ['text', 'sketch', 'pdf'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`${t}-panel`).classList.toggle('hidden', t !== tab);
+  });
 }
 
 // ============================================================
@@ -3093,7 +3249,7 @@ async function exportPDF() {
   const svg = document.querySelector('#preview-output svg');
   if (!svg && !code) { toast('尚無流程圖可匯出', 'error'); return; }
   const title = exportName();
-  const bgColor = currentTheme === 'dark' ? '#0c0f1a' : '#ffffff';
+  const bgColor = getExportBgColor();
 
   let svgHtml = svg?.outerHTML || '';
 
@@ -3165,6 +3321,7 @@ function exportSVG() {
 }
 
 function getExportBgColor() {
+  if (currentStyle === 'handdrawn' || currentStyle === 'miro') return '#fbfbf8';
   if (currentTheme === 'dark') return '#0c0f1a';
   if (currentTheme === 'bw' || currentTheme === 'blackwhite') return '#ffffff';
   return '#f8fafc';
@@ -3207,8 +3364,8 @@ function getSVGDimensions(svgEl) {
   return { width: Math.max(w || 800, 100), height: Math.max(h || 600, 100) };
 }
 
-// SVG 字串 → PNG data URL
-function svgStringToPNG(svgString, bgColor, scale = 3) {
+// SVG 字串 → 點陣圖 data URL（PNG 或 JPEG）
+function svgStringToPNG(svgString, bgColor, scale = 3, mime = 'image/png') {
   return new Promise((resolve, reject) => {
     const svgEl = new DOMParser().parseFromString(svgString, 'image/svg+xml').querySelector('svg');
     if (!svgEl) return reject(new Error('SVG 解析失敗'));
@@ -3224,7 +3381,7 @@ function svgStringToPNG(svgString, bgColor, scale = 3) {
         ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/png'));
+        resolve(canvas.toDataURL(mime, mime === 'image/jpeg' ? 0.92 : undefined));
       } catch (err) { reject(err); }
     };
     img.onerror = () => reject(new Error('SVG 圖片載入失敗'));
@@ -3232,28 +3389,35 @@ function svgStringToPNG(svgString, bgColor, scale = 3) {
   });
 }
 
-async function exportPNG() {
+async function exportRaster(format) {  // 'png' | 'jpeg'
   const code = document.getElementById('mermaid-code').value.trim();
   const liveSvg = document.querySelector('#preview-output svg');
   if (!code && !liveSvg) { toast('尚無流程圖可匯出', 'error'); return; }
 
-  showLoading('正在生成 PNG...');
+  const label = format.toUpperCase();
+  showLoading(`正在生成 ${label}...`);
   try {
     const svgString = code
       ? await renderCodeForExport(code)
       : new XMLSerializer().serializeToString(liveSvg);
-    const pngUrl = await svgStringToPNG(svgString, getExportBgColor());
-    dl(pngUrl, exportName() + '.png');
-    toast('PNG 已下載 ✓', 'success');
+    // JPEG 無透明度，深色背景轉為白色更適合插入文件
+    const bg = format === 'jpeg' && currentTheme === 'dark' && currentStyle === 'business'
+      ? '#ffffff' : getExportBgColor();
+    const dataUrl = await svgStringToPNG(svgString, bg, 3, format === 'jpeg' ? 'image/jpeg' : 'image/png');
+    dl(dataUrl, exportName() + (format === 'jpeg' ? '.jpg' : '.png'));
+    toast(`${label} 已下載 ✓`, 'success');
   } catch (e) {
-    console.error('exportPNG error:', e);
-    toast('PNG 匯出失敗，改為下載 SVG', 'info');
+    console.error('exportRaster error:', e);
+    toast(`${label} 匯出失敗，改為下載 SVG`, 'info');
     const svg = document.querySelector('#preview-output svg');
     if (svg) downloadSVG(sanitizeSVGForExport(svg, getExportBgColor()));
   } finally {
     hideLoading();
   }
 }
+
+function exportPNG() { return exportRaster('png'); }
+function exportJPEG() { return exportRaster('jpeg'); }
 
 function sanitizeSVGForExport(svgEl, bgColor) {
   if (typeof svgEl === 'string') {
@@ -3376,6 +3540,29 @@ function getMermaidConfig(theme) {
     flowchart: { htmlLabels: true, curve: 'basis', padding: 24, nodeSpacing: 50, rankSpacing: 70, subgraphMargin: 20, useMaxWidth: true },
     securityLevel: 'loose',
   };
+
+  // 手繪風格：Mermaid v11 原生 handDrawn look，配淺色紙面主題
+  if (currentStyle === 'handdrawn') {
+    return { ...base, look: 'handDrawn', theme: 'neutral', themeVariables: {
+      primaryColor: '#fdf6e3', primaryTextColor: '#2d2a26', primaryBorderColor: '#5c544a',
+      lineColor: '#4a453d', secondaryColor: '#f5efdc', tertiaryColor: '#faf5e6',
+      edgeLabelBackground: '#fbfbf8', clusterBkg: '#f7f2e3', clusterBorder: '#8a8272',
+      nodeTextColor: '#2d2a26',
+      fontFamily: '"Segoe Print", "Comic Sans MS", "Microsoft JhengHei", cursive, sans-serif', fontSize: '14px',
+    }};
+  }
+
+  // Miro 彩色：明亮便利貼配色
+  if (currentStyle === 'miro') {
+    return { ...base, theme: 'base', themeVariables: {
+      primaryColor: '#FFF9B1', primaryTextColor: '#1a1a1a', primaryBorderColor: '#E3D64B',
+      lineColor: '#3d3d3d', secondaryColor: '#D5F692', tertiaryColor: '#A6CCF5',
+      edgeLabelBackground: '#ffffff', clusterBkg: '#F7F7F5', clusterBorder: '#c4c4c0',
+      titleColor: '#1a1a1a', nodeTextColor: '#1a1a1a',
+      fontFamily: 'Arial, "Microsoft JhengHei", sans-serif', fontSize: '14px',
+    }};
+  }
+
   if (theme === 'dark') {
     return { ...base, theme: 'dark', themeVariables: {
       primaryColor: '#1e3a5f', primaryTextColor: '#e8f0fe', primaryBorderColor: '#3b82f6',
@@ -3400,14 +3587,7 @@ function getMermaidConfig(theme) {
 function setTheme(theme) {
   currentTheme = theme;
   mermaid.initialize(getMermaidConfig(theme));
-  const preview = document.getElementById('preview-output');
-  if (theme === 'dark') {
-    preview.style.background = '';
-  } else if (theme === 'bw' || theme === 'blackwhite') {
-    preview.style.background = '#ffffff';
-  } else {
-    preview.style.background = '#f8fafc';
-  }
+  applyPreviewBackground();
   const code = document.getElementById('mermaid-code').value;
   if (code.trim()) renderMermaid(code);
 }
